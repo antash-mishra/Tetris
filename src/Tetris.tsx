@@ -17,9 +17,8 @@ export class Tetris extends Component {
 				{
 					Array.from({length: num_row_points}, (_, i) => 
 						Array.from({length: num_col_points}, (_, j) => {
-							console.log(i, j, "pos: ", (-1.25 + ((i+1)*0.25)), -2.5 + ((j+1)*0.25))
 							return (
-								<mesh key={`${i}-${j}`} position={[(-1.25 + ((i+1)*0.25)), -2.5 + ((j+1)*0.25), 1]}>
+								<mesh key={`${i}-${j}`} position={[(-1.25 + ((i+1)*0.25)), -2.5 + ((j+1)*0.25), 0.1]}>
 									<sphereGeometry args={[0.015, 32, 32]} />
 									<meshBasicMaterial color="black" opacity={0.5} />
 								</mesh>

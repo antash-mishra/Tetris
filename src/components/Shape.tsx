@@ -1,42 +1,125 @@
 import React, { Component } from 'react'
 
-const shape = [
-  '#',
-  '#',
-  '#',
-  '#',
-]
+export type ShapeType = 'T' | 'L' | 'I' | 'O' | 'S' | 'Z' | 'J';
 
-export class Shape extends Component {
+const shape = {
+  'S' : [
+    ' ##',
+    '## '
+  ],
+
+  'Z' : [
+    '##',
+    ' ##'
+  ],
   
-  render() {
-    let max_length = 0;
-    shape.forEach(row => {
-      let row_length = row.split('').length;
-      if (row_length > max_length) {
-        max_length = row_length;
+  'L' : [
+    '#',
+    '#',
+    '##'
+  ],
+  
+  'J' : [
+    ' #',
+    ' #',
+    '##'
+  ],
+  
+  'O' : [
+    '##',
+    '##'
+  ],
+  
+  'T' : [
+    ' #',
+    '###'
+  ],
+  
+  'I' : [
+    '#',
+    '#',
+    '#',
+    '#',
+  ],
+  
+  '#' : [ // <-- temporary, just for testing
+    '####',
+    '####',
+    '####',
+    '####',
+  ],   
+}
+
+export class Shape extends Component<{
+  shapeType: ShapeType,
+  rotation?: number
+}> {
+
+  rotateShape(matrix: string[]): string[] {
+    const rows = matrix.length;
+    const cols = Math.max(...matrix.map(row => row.length));
+    
+    // Pad all rows to have equal length
+    const paddedMatrix = matrix.map(row => {
+      while (row.length < cols) {
+        row = row + ' ';
       }
-    })
-    // console.log("Max Length: ", max_length);
+      return row;
+    });
+  
+    // Create new array for rotated shape
+    let rotated: string[] = [];
+    
+    // Rotate 90 degrees clockwise
+    for (let col = 0; col < cols; col++) {
+      let newRow = '';
+      for (let row = rows - 1; row >= 0; row--) {
+        newRow += paddedMatrix[row][col] || ' ';
+      }
+      rotated.push(newRow);
+    }
+  
+    // Trim trailing spaces but preserve leading spaces
+    return rotated.map(row => row.replace(/\s+$/, ''));
+  }
+
+  render() {
+    let current_shape = shape[this.props.shapeType];
+    const rotations = (this.props.rotation || 0) % 4;
+    console.log("Current Shape: ", current_shape);
+
+    // Apply rotations
+    console.log("rotating: ", "\n", current_shape.join('\n'));
+    for (let i = 0; i < rotations; i++) {
+      current_shape = this.rotateShape(current_shape);
+    }
+    
+    // Calculate center offset for rotation
+    const width = Math.max(...current_shape.map(row => row.length));
+    const height = current_shape.length;
+
     return (
-      <group position={[-1.25, -2.5, 0]}>
-        {shape.map((row, indexX) => 
+      <group>
+        {current_shape.map((row, indexX) => 
         
           row.split('').map((cell, indexY) => {
             if (cell === '#') {
 
               return (
-                <mesh key={indexY+indexX} position={[(indexY*0.25)+(0.24/2), ((shape.length - indexX)*0.25)+(0.24/2), 1]}>
-                  <planeGeometry args={[0.24, 0.24, 32, 32]} />
+                <mesh key={indexY+indexX} 
+                  position={[
+                    (indexY*0.25)+(0.24/2), 
+                    ((current_shape.length - indexX)*0.25)+(0.24/2),
+                    0.1
+                  ]}
+                >
+                  <planeGeometry args={[0.23, 0.23, 32, 32]} />
                   <meshBasicMaterial color="red" />
                 </mesh>
               )
             }
             return (
-              <mesh key={indexY+indexX} position={[indexY*0.25, (shape.length - indexX)*0.225, 1]}>
-                <planeGeometry args={[0.24, 0.215, 32, 32]} />
-                <meshBasicMaterial color="black" opacity={0.0} transparent />
-              </mesh>
+              null
             )
           })
         )}

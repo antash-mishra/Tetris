@@ -86,17 +86,12 @@ export class Shape extends Component<{
   render() {
     let current_shape = shape[this.props.shapeType];
     const rotations = (this.props.rotation || 0) % 4;
-    console.log("Current Shape: ", current_shape);
 
     // Apply rotations
-    console.log("rotating: ", "\n", current_shape.join('\n'));
     for (let i = 0; i < rotations; i++) {
       current_shape = this.rotateShape(current_shape);
     }
-    
-    // Calculate center offset for rotation
-    const width = Math.max(...current_shape.map(row => row.length));
-    const height = current_shape.length;
+
 
     return (
       <group>

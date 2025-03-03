@@ -7,93 +7,161 @@ import { TransformControls, OrbitControls, PivotControls } from '@react-three/dr
 import * as THREE from 'three'
 import { ShapeType } from './components/Shape'
 
-function ShapeMovement({ rotation, onShapeLanded, shapeType }: { 
-  rotation: number,
-  onShapeLanded: () => void,
-  shapeType: ShapeType
+type ShapeState = {
+  id: number,
+  type: ShapeType,
+  position: {
+    x: number,
+    y: number,
+    z: number
+  },
+  hasLanded: boolean,
+  rotation: number
+}
+
+function ShapeMovement({  shapeState, onShapeLanded, onUpdatePosition, onRotate }: { 
+  shapeState: ShapeState,
+  onShapeLanded: (id: number) => void,
+  onUpdatePosition: (id: number, x: number, y: number) => void,
+  onRotate: () => void
 })
+
 {
   
   const shape = useRef<THREE.Group>(new THREE.Group());
-  const startY = 2.5;  // Start position at top
-  const endY = -2.75;   // End position at bottom
-  const speed = 0.5;     // Speed of descent (adjust as needed)
-  const [xPosition, setXPosition] = useState(-0.5); // Track x position
-  const [hasLanded, setHasLanded] = useState(false);
+  const startTime = useRef(performance.now() / 1000);
+  const startY = 2.5;
+  const endY = -2.75;
+  const speed = 1;
 
   // Handle keyboard controls
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (hasLanded) return;
+      if (shapeState.hasLanded) return;
 
       switch (event.key) {
         case 'ArrowLeft':
           // Move left, but not beyond left boundary (-1.25)
-          setXPosition(prev => Math.max(-1.25, prev - 0.25));
+          onUpdatePosition(
+            shapeState.id,
+            Math.max(-1.25, shapeState.position.x - 0.25),
+            shapeState.position.y
+          );
           break;
         case 'ArrowRight':
           // Move right, but not beyond right boundary (0.50)
-          setXPosition(prev => Math.min(0.50, prev + 0.25));
+          onUpdatePosition(
+            shapeState.id,
+            Math.min(0.50, shapeState.position.x + 0.25),
+            shapeState.position.y
+          );
+          break;
+
+        case 'ArrowUp':
+          onRotate();
           break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
+  }, [shapeState]);
 
   useFrame((state) => {
-    if (!shape.current || hasLanded) return;
 
-    const time = state.clock.getElapsedTime();
-    const newY = startY - (time * speed);
-    console.log(newY, "Time: " ,time);
+    if (!shape.current || shapeState.hasLanded) return;
 
-    shape.current.position.x = xPosition;
+    const elapsedTime = state.clock.getElapsedTime() - startTime.current;
+    const newY = startY - (elapsedTime * speed);
+
 
     // Stop at bottom position
     if (newY > endY) {
-      shape.current.position.y = newY;
+      onUpdatePosition(shapeState.id, shapeState.position.x, newY);
     } else {
-      shape.current.position.y = endY;
-      setHasLanded(true);
-      onShapeLanded(); // Trigger new shape spawn
+      onUpdatePosition(shapeState.id, shapeState.position.x, endY);
+      onShapeLanded(shapeState.id); // Trigger new shape spawn
     }
   });
 
-  return (
-    <group ref={shape} position={[xPosition, startY, 0]}>
-      <Shape shapeType={shapeType} rotation={rotation}/>
+  return (  
+    <group 
+      ref={shape} 
+      position={[shapeState.position.x, shapeState.position.y, shapeState.position.z]}>
+      <Shape shapeType={shapeState.type} rotation={shapeState.rotation}/>
     </group>
   );
+  
 
 }
 
 function App() {
 
-  const [rotation, setRotation] = useState(0);
-  const [currentShape, setCurrentShape] = useState<ShapeType>('T');
-  const shapes: ShapeType[] = ['T', 'L', 'I', 'O', 'S', 'Z', 'J'];
+  const [shapes, setShapes] = useState<ShapeState[]>([]);
+  const [nextId, setNextId] = useState(1);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const shapeTypes: ShapeType[] = ['T', 'L', 'I', 'O', 'S', 'Z', 'J'];
 
-  const handleRotate = () => {
-    setRotation(prev => (prev + 1) % 4); // Increment rotation state (0-3)
+
+  //Initialize shapes
+  // Initialize the game with first shape
+  useEffect(() => {
+    if (!isInitialized) {
+      const randomType = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
+      setShapes([{
+        id: 1,
+        type: randomType,
+        position: {x: -0.5, y: 2.5, z: 0},
+        hasLanded: false,
+        rotation: 0
+      }]);
+      setNextId(2);
+      setIsInitialized(true);
+    }
+  }, [isInitialized]);
+
+
+  const spawnNewShape = () => {
+    const randomType = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
+    console.log("randomType", randomType, Math.floor(Math.random() * shapeTypes.length));
+    const newShape: ShapeState = {
+      id: nextId,
+      type: randomType,
+      position: {x: -0.5, y: 2.5, z: 0},
+      hasLanded: false,
+      rotation: 0
+    };
+
+    setShapes(prev => [...prev, newShape]);
+    setNextId(prev => prev + 1);
   };
 
-  const handleShapeLanded = () => {
-    // Get random shape type for next piece
-    const randomShape = shapes[Math.floor(Math.random() * shapes.length)];  
-    setCurrentShape(randomShape);
+  const handleShapeLanded = (id: number) => {
+    setShapes(prev => prev.map(shape => 
+      shape.id === id 
+        ? { ...shape, hasLanded: true }
+        : shape
+    ));
+    spawnNewShape();
+  };
+  
+  const handleUpdatePosition = (id:number, x:number, y:number) => {
+    setShapes(prev => prev.map(shape => 
+      shape.id === id ? {...shape, position: {...shape.position, x, y}} : shape
+    ));
+  };
+
+  const handleRotate = () => {
+    // Rotate only the active (non-landed) shape
+    setShapes(prev => prev.map(shape =>
+      !shape.hasLanded
+        ? { ...shape, rotation: (shape.rotation + 1) % 4 }
+        : shape
+    ));
   };
 
   return (
     <>
-      <button 
-        onClick={handleRotate}
-        style={{ position: 'absolute', top: 20, left: 20, zIndex: 1 }}
-      >
-        Rotate
-      </button>
       <Canvas
         orthographic        
         camera={{
@@ -105,11 +173,16 @@ function App() {
         }}
       >
         <Tetris />
-        <ShapeMovement 
-          rotation={rotation} 
-          onShapeLanded={handleShapeLanded}
-          shapeType={currentShape}
-        />
+        {shapes.map((shape, index) => (
+          <ShapeMovement 
+            key={shape.id+index}
+            shapeState={shape}
+            onShapeLanded={handleShapeLanded}
+            onUpdatePosition={handleUpdatePosition}
+            onRotate={handleRotate}
+          />
+        ))}
+
         <OrbitControls />
       </Canvas>
     </>

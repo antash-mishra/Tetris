@@ -55,6 +55,8 @@ export class Shape extends Component<{
   rotation?: number
 }> {
 
+  
+
   rotateShape(matrix: string[]): string[] {
     const rows = matrix.length;
     const cols = Math.max(...matrix.map(row => row.length));
@@ -96,10 +98,11 @@ export class Shape extends Component<{
     return (
       <group>
         {current_shape.map((row, indexX) => 
-        
+          
           row.split('').map((cell, indexY) => {
+            
             if (cell === '#') {
-
+              // console.log(((current_shape.length - indexX)*0.25)+(0.24/2))
               return (
                 <mesh key={indexY+indexX} 
                   position={[

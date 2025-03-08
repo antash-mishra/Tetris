@@ -82,8 +82,12 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
 
     //const elapsedTime =   state.clock.getElapsedTime() - startTime.current;
     const elapsedTime = startTime.current.getElapsedTime()
-    const newY = startY - (elapsedTime * speed);
+    
+  
+    // ShapeMatrix length addition
+    const newY = (startY) - (elapsedTime * speed);
 
+    // console.log("NewY: ", newY)
     // Stop at bottom position
     if (newY > endY) {
       onUpdatePosition(shapeState.id, shapeState.position.x, newY);
@@ -133,16 +137,18 @@ function App() {
   const isValidPosition = (shapeType: ShapeType, x: number, y: number, rotation: number) => {
     const cells = getShapeMatrix(shapeType, rotation);
     const [gridX, gridY] = worldToGrid(x, y);
-    console.log("All: ", gridX, gridY)
+    // console.log("All: ", gridX, gridY)
     for (let row = 0; row < cells.length; row++) {
       for (let col = 0; col < cells[row].length; col++) {
         if (cells[row][col] === '#') {
           const newX = gridX + col;
           // make the height to 0, for any shapeType
           const newY = gridY - row + cells.length
-          console.log(newX, newY)
-          if (newX < 0 || newX >= 10 || newY < 0 || newY >= 20) return false;
-          if (grid[newY][newX].occupied) return false;
+          // console.log(newX, newY)
+          if (newX < 0 || newX >= 10 || newY < 0 || newY > (20+cells.length)) return false;
+          if (newY < 20) {
+            if (grid[newY][newX].occupied) return false;
+          }
         }
       }
     }
@@ -188,7 +194,7 @@ function App() {
 
     const shapeMatrix = getShapeMatrix(shape.type, shape.rotation);
     const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
-    console.log("Grid: ", gridX, gridY);
+    // console.log("Grid: ", gridX, gridY);
     setGrid(prev => {
       const newGrid = [...prev.map(row => [...row])];
       for (let row = 0; row < shapeMatrix.length; row++) {
@@ -196,9 +202,11 @@ function App() {
           if (shapeMatrix[row][col] === '#') {
             const newX = gridX + col;
             const newY = gridY - row + shapeMatrix.length;
-            console.log(newX, newY);
-            if (newX >= 0 && newX < 10 && newY >= 0 && newY < 20) {
-              newGrid[newY][newX] = { occupied: true, shapeId: id };
+            // console.log(newX, newY);
+            if (newX >= 0 && newX < 10 && newY >= 0 && newY <= (20+shapeMatrix.length)) {
+              if (newY <= 20) {
+                newGrid[newY][newX] = { occupied: true, shapeId: id };
+              }
             }
           }
         }

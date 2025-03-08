@@ -23,7 +23,8 @@ type ShapeState = {
     z: number
   },
   hasLanded: boolean,
-  rotation: number
+  rotation: number,
+  shapeMaxWidth: number
 }
 
 const BOARD_HEIGHT = 5;
@@ -41,10 +42,11 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
   const hasLandedRef = useRef(false);
   const startY = 2.5;
   const endY = -2.75;
-  const speed = 0.1;
+  const speed = 0.5;
 
   // Handle keyboard controls
   useEffect(() => {
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (shapeState.hasLanded) return;
       switch (event.key) {
@@ -60,7 +62,7 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
           // Move right, but not beyond right boundary (0.50)
           onUpdatePosition(
             shapeState.id,
-            Math.min(0.50, shapeState.position.x + 0.25),
+            Math.min(1.0 - ((shapeState.shapeMaxWidth - 1)*0.25) , shapeState.position.x + 0.25),
             shapeState.position.y
           );
           break;
@@ -79,7 +81,8 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
 
     if (!shape.current || shapeState.hasLanded) return;
     // console.log(state.clock.getElapsedTime());
-
+    console.log(shapeState.position.x)
+    // console.log(shapeState.rotation)
     //const elapsedTime =   state.clock.getElapsedTime() - startTime.current;
     const elapsedTime = startTime.current.getElapsedTime()
     
@@ -141,10 +144,10 @@ function App() {
     for (let row = 0; row < cells.length; row++) {
       for (let col = 0; col < cells[row].length; col++) {
         if (cells[row][col] === '#') {
-          const newX = gridX + col;
+          const newX = gridX + col ;
           // make the height to 0, for any shapeType
           const newY = gridY - row + cells.length
-          // console.log(newX, newY)
+          // console.log(newX)
           if (newX < 0 || newX >= 10 || newY < 0 || newY > (20+cells.length)) return false;
           if (newY < 20) {
             if (grid[newY][newX].occupied) return false;
@@ -163,9 +166,12 @@ function App() {
       setShapes([{
         id: 1,
         type: randomType,
-        position: { x: -0.5, y: 2.5, z: 0 },
+        position: { x: -1.25, y: 2.5, z: 0 },
         hasLanded: false,
-        rotation: 0
+        rotation: 0,
+        shapeMaxWidth: Math.max(...Figures[randomType].map((row) => {
+          return row.split('').length
+        }).values())
       }]);
       setNextId(2);
       setIsInitialized(true);
@@ -180,7 +186,10 @@ function App() {
       type: randomType,
       position: { x: -0.5, y: 2.5, z: 0 },
       hasLanded: false,
-      rotation: 0
+      rotation: 0,
+      shapeMaxWidth: Math.max(...Figures[randomType].map((row, indexX) => {
+        return row.split('').length
+      }).values())
     };
 
     setShapes(prev => [...prev, newShape]);
@@ -200,14 +209,14 @@ function App() {
       for (let row = 0; row < shapeMatrix.length; row++) {
         for (let col = 0; col < shapeMatrix[row].length; col++) {
           if (shapeMatrix[row][col] === '#') {
-            const newX = gridX + col;
+            const newX = gridX + col ;
             const newY = gridY - row + shapeMatrix.length;
             // console.log(newX, newY);
             if (newX >= 0 && newX < 10 && newY >= 0 && newY <= (20+shapeMatrix.length)) {
               if (newY <= 20) {
                 newGrid[newY][newX] = { occupied: true, shapeId: id };
               }
-            }
+            } 
           }
         }
       }
@@ -229,17 +238,20 @@ function App() {
   const checkCompletedRows = () => {
     setGrid(prev => {
       const newGrid = [...prev];
-      let row = newGrid.length - 1;
-      while (row >= 0) {
+
+      let row = 0;
+      // console.log("New Grid: ", row, newGrid)
+      while (row >= 0 && newGrid.length < 20) {
         if (newGrid[row].every(cell => cell.occupied)) {
           // Row is completed, remove it
           newGrid.splice(row, 1);
-          console.log("true")
+          // console.log("true")
           // Add new row at the top
           newGrid.unshift(Array(10).fill({ occupied: false, shapeId: null }));
         } else {
-          row--;
-          console.log("false")
+          // console.log("false")
+          row++;
+          
         }
       }
       return newGrid;
@@ -262,8 +274,11 @@ function App() {
     // Rotate only the active (non-landed) shape
     setShapes(prev => prev.map(shape =>
       !shape.hasLanded
-        ? { ...shape, rotation: (shape.rotation + 1) % 4 }
-        : shape
+        ? { ...shape, rotation: (shape.rotation + 1) % 4, 
+            shapeMaxWidth: Math.max(...getShapeMatrix(shape.type, (shape.rotation + 1) % 4).map((row) => {
+              return row.split('').length
+            }).values()) 
+          } : shape
     ));
   };
 

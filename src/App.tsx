@@ -24,7 +24,9 @@ type ShapeState = {
   },
   hasLanded: boolean,
   rotation: number,
-  shapeMaxWidth: number
+  shapeMaxWidth: number,
+  customMatrix?: string[],
+  removed?: boolean
 }
 
 const BOARD_HEIGHT = 5;
@@ -105,7 +107,7 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
     <group
       ref={shape}
       position={[shapeState.position.x, shapeState.position.y, shapeState.position.z]}>
-      <Shape shapeType={shapeState.type} rotation={shapeState.rotation} />
+      <Shape shapeType={shapeState.type} rotation={shapeState.rotation} customMatrix={shapeState.customMatrix} />
     </group>
   );
 }
@@ -127,7 +129,11 @@ function App() {
     return [gridX, gridY];
   }
 
-  const getShapeMatrix = (shapeType: ShapeType, rotation: number): string[] => {
+  const getShapeMatrix = (shapeType: ShapeType, rotation: number, customMatrix?: string[]): string[] => {
+    if (shapeType === 'custom' && customMatrix) {
+      return customMatrix;
+    }
+  
     let matrix = Figures[shapeType];
     for (let i = 0; i < rotation; i++) {
       matrix = Shape.prototype.rotateShape(matrix);
@@ -171,7 +177,8 @@ function App() {
         rotation: 0,
         shapeMaxWidth: Math.max(...Figures[randomType].map((row) => {
           return row.split('').length
-        }).values())
+        }).values()),
+
       }]);
       setNextId(2);
       setIsInitialized(true);
@@ -237,71 +244,120 @@ function App() {
 
   const checkCompletedRows = () => {
     setGrid(prev => {
-      const newGrid = [...prev];
+      const newGrid = [...prev.map(row => [...row])];
   
       let row = 0;
-      
-      // Collect shape IDs that are affected by row completion
-      const affectedShapeIds: Set<number> = new Set<number>();
-      
+      let rowsCleared = false;
+      const completedRows: number[] = [];
+            
       // Make sure we don't go beyond the grid's length
       while (row < newGrid.length) {
         // Check if the row exists before calling .every()
         if (newGrid[row] && newGrid[row].every(cell => cell.occupied)) {
-          console.log("Row Completed: ", row, newGrid[row]);
-          // Collect shape IDs in a completed Row
-          newGrid[row].forEach(cell => {
-            if (cell.shapeId !== null) {
-              affectedShapeIds.add(cell.shapeId);
-            }
-          });
-
-          // Row is completed, remove it
-          newGrid.splice(row, 1);
-          
-          // Add new row at the top
-          newGrid.unshift(Array(10).fill({ occupied: false, shapeId: null }));
-          
-
-          // Don't increment row here since we've removed the current row
-          // and the next row has shifted up to the current position
-        } else {
-          // Only increment row if we didn't remove a row
-          row++;
+          completedRows.push(row);
+          rowsCleared = true;
         }
+        row++;
       }
       
-      // Cleanup shapes that are no longer needed
-      cleanupRemovedShapes(newGrid, affectedShapeIds);
-      
+      if (rowsCleared) {
+        
+        // Update the visual representation of remaining shapes
+
+        console.log("Completed Rows: ", completedRows, newGrid)
+
+        updateShapesMatrices(completedRows, newGrid);
+
+        completedRows.sort((a, b) => b - a).forEach(rowIndex => {
+          // Remove the row and shift all rows above it down
+          newGrid.splice(rowIndex, 1);
+          newGrid.unshift(Array(10).fill({ occupied: false, shapeId: null }));
+        })
+      }
+
       return newGrid;
     });
   };
 
-  const cleanupRemovedShapes = (grid: GridCell[][], affectedShapeIds: Set<number>) => {
-    console.log("Cleanup: ", affectedShapeIds)
-    // First, find which shape IDs still exist in the grid
-    const remainingShapeIds = new Set<number>();
+  const updateShapesMatrices = (completedRows: number[], grid: GridCell[][]) => {
+
+    // console.log("Completed Rows: ", completedRows, grid);
     
-    grid.forEach(row => {
-      row.forEach(cell => {
-        if (cell.shapeId !== null) {
-          remainingShapeIds.add(cell.shapeId);
+    // Update shapes that have blocks in completed rows
+    setShapes(prev => prev.map(shape => {
+      if (!shape.hasLanded) return shape;
+
+    // Get the shape matrix, considering custom matrices
+    const matrix = shape.type === 'custom' && shape.customMatrix 
+      ? shape.customMatrix 
+      : getShapeMatrix(shape.type, shape.rotation);
+
+      console.log("Matrix: ", matrix)
+      const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
+
+      // Creating matrix with removed blocks
+      let newMatrix = [...matrix];
+      let modified = false;
+
+      completedRows.forEach(completedRow => {
+        // Check each cell in the shape matrix
+        for (let row = 0; row < matrix.length; row++) {
+          const gridRowPosition = gridY - row + matrix.length;
+          
+        
+          // If this row of the shape coincides with a completed row
+          if (gridRowPosition === (completedRow+1)) {
+            // Convert the matrix row to array, remove the blocks, and convert back
+            let matrixRow = newMatrix[row].split('');
+            for (let col = 0; col < matrixRow.length; col++) {
+              const gridColPosition = gridX + col;
+              // Check if this position is part of the completed row
+              if (gridColPosition >= 0 && 
+                  gridColPosition < 10 && 
+                  grid[completedRow][gridColPosition].shapeId === shape.id) {
+                // console.log("Removing: ", gridColPosition, gridRowPosition, shape.id)
+                matrixRow[col] = ' ';
+                modified = true;
+              }
+            }
+            newMatrix[row] = matrixRow.join('');
+          }
+          // console.log("New Matrix: ", newMatrix)
         }
       });
-    });
-    
-    // Remove shapes that are no longer in the grid
-    setShapes(prev => prev.filter(shape => {
-      // Keep shapes that aren't landed
-      if (!shape.hasLanded) return true;
+
+      console.log("Modified: ", modified)
+
+      if (!modified) return shape;
       
-      // Keep landed shapes that weren't affected by row clearing
-      if (!affectedShapeIds.has(shape.id)) return true;
-      
-      // For affected shapes, only keep them if they still have cells in the grid
-      return remainingShapeIds.has(shape.id);
-    }));
+      // Remove empty rows from the top and bottom of the matrix
+      while (newMatrix.length > 0 && newMatrix[0].trim() === '') {
+        newMatrix.shift();
+      }
+      while (newMatrix.length > 0 && newMatrix[newMatrix.length - 1].trim() === '') {
+        newMatrix.pop();
+      }
+
+      // If the entire shape was cleared, remove it
+      if (newMatrix.length === 0) {
+        return { ...shape, removed: true };
+      }
+
+      // Calculate new position if top rows were removed
+      const yOffset = matrix.length - newMatrix.length;
+      const newY = shape.position.y - (yOffset * 0.25);
+
+      // Update the shape with new matrix and position
+      return {
+        ...shape,
+        type: 'custom' as ShapeType, // You'll need to add 'custom' to ShapeType
+        customMatrix: newMatrix, // You'll need to add this to ShapeState type
+        position: {
+          ...shape.position,
+          y: newY
+        }
+      };
+    }).filter(shape => !shape.removed));
   };
 
   const handleUpdatePosition = (id: number, x: number, y: number) => {

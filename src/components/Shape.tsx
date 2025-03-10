@@ -1,6 +1,6 @@
 import React, { Component } from 'react'
 
-export type ShapeType = 'T' | 'L' | 'I' | 'O' | 'S' | 'Z' | 'J';
+export type ShapeType = 'T' | 'L' | 'I' | 'O' | 'S' | 'Z' | 'J' | 'custom';
 
 const shape = {
   'S' : [
@@ -52,7 +52,8 @@ const shape = {
 
 export class Shape extends Component<{
   shapeType: ShapeType,
-  rotation?: number
+  rotation?: number,
+  customMatrix?: string[]
 }> {
 
   
@@ -86,12 +87,14 @@ export class Shape extends Component<{
   }
 
   render() {
-    let current_shape = shape[this.props.shapeType];
+    let current_shape = this.props.customMatrix || shape[this.props.shapeType];
     const rotations = (this.props.rotation || 0) % 4;
 
     // Apply rotations
-    for (let i = 0; i < rotations; i++) {
-      current_shape = this.rotateShape(current_shape);
+    if (!this.props.customMatrix) {
+      for (let i = 0; i < rotations; i++) {
+        current_shape = this.rotateShape(current_shape);
+      }
     }
 
 

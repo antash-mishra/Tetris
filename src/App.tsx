@@ -238,24 +238,70 @@ function App() {
   const checkCompletedRows = () => {
     setGrid(prev => {
       const newGrid = [...prev];
-
+  
       let row = 0;
-      // console.log("New Grid: ", row, newGrid)
-      while (row >= 0 && newGrid.length < 20) {
-        if (newGrid[row].every(cell => cell.occupied)) {
+      
+      // Collect shape IDs that are affected by row completion
+      const affectedShapeIds: Set<number> = new Set<number>();
+      
+      // Make sure we don't go beyond the grid's length
+      while (row < newGrid.length) {
+        // Check if the row exists before calling .every()
+        if (newGrid[row] && newGrid[row].every(cell => cell.occupied)) {
+          console.log("Row Completed: ", row, newGrid[row]);
+          // Collect shape IDs in a completed Row
+          newGrid[row].forEach(cell => {
+            if (cell.shapeId !== null) {
+              affectedShapeIds.add(cell.shapeId);
+            }
+          });
+
           // Row is completed, remove it
           newGrid.splice(row, 1);
-          // console.log("true")
+          
           // Add new row at the top
           newGrid.unshift(Array(10).fill({ occupied: false, shapeId: null }));
-        } else {
-          // console.log("false")
-          row++;
           
+
+          // Don't increment row here since we've removed the current row
+          // and the next row has shifted up to the current position
+        } else {
+          // Only increment row if we didn't remove a row
+          row++;
         }
       }
+      
+      // Cleanup shapes that are no longer needed
+      cleanupRemovedShapes(newGrid, affectedShapeIds);
+      
       return newGrid;
     });
+  };
+
+  const cleanupRemovedShapes = (grid: GridCell[][], affectedShapeIds: Set<number>) => {
+    console.log("Cleanup: ", affectedShapeIds)
+    // First, find which shape IDs still exist in the grid
+    const remainingShapeIds = new Set<number>();
+    
+    grid.forEach(row => {
+      row.forEach(cell => {
+        if (cell.shapeId !== null) {
+          remainingShapeIds.add(cell.shapeId);
+        }
+      });
+    });
+    
+    // Remove shapes that are no longer in the grid
+    setShapes(prev => prev.filter(shape => {
+      // Keep shapes that aren't landed
+      if (!shape.hasLanded) return true;
+      
+      // Keep landed shapes that weren't affected by row clearing
+      if (!affectedShapeIds.has(shape.id)) return true;
+      
+      // For affected shapes, only keep them if they still have cells in the grid
+      return remainingShapeIds.has(shape.id);
+    }));
   };
 
   const handleUpdatePosition = (id: number, x: number, y: number) => {
@@ -272,14 +318,56 @@ function App() {
 
   const handleRotate = () => {
     // Rotate only the active (non-landed) shape
-    setShapes(prev => prev.map(shape =>
-      !shape.hasLanded
-        ? { ...shape, rotation: (shape.rotation + 1) % 4, 
-            shapeMaxWidth: Math.max(...getShapeMatrix(shape.type, (shape.rotation + 1) % 4).map((row) => {
-              return row.split('').length
-            }).values()) 
-          } : shape
-    ));
+    setShapes(prev => prev.map(shape => {
+      if (!shape.hasLanded) {
+        
+        // Calculate new rotation
+        const newRotation = (shape.rotation + 1) % 4
+        
+        // Get the rotated shape matrix and width
+        const rotatedMatrix = getShapeMatrix(shape.type, newRotation);
+                // Calculate max width properly by counting only non-space characters
+        const shapeMaxWidth = Math.max(...rotatedMatrix.map(row => {
+          // Trim trailing spaces and count length
+          return row.trimEnd().length;
+        }));
+
+        // Get current shape width
+        const currentMatrix = getShapeMatrix(shape.type, shape.rotation);
+        const currentWidth = Math.max(...currentMatrix.map(row => row.trimEnd().length));
+
+        // Only check boundaries if the width actually changes
+        if (shapeMaxWidth !== currentWidth) {
+          // Check if rotation would cause the shape to go out of bounds
+          const newX = shape.position.x; // => 0.75
+          const rightBoundary = 1.0 - ((shapeMaxWidth - 1) * 0.25); // => 0.25
+          
+          // If rotation would cause out of bounds, adjust position if possible
+          if (newX > rightBoundary && rightBoundary >= -1.25) {
+            console.log("Right Boundary: ", rightBoundary, newX, shapeMaxWidth, currentWidth, newRotation,  rotatedMatrix)  
+            return {
+              ...shape,
+              rotation: newRotation,
+              shapeMaxWidth: shapeMaxWidth,
+              position: {
+                ...shape.position,
+                x: rightBoundary
+              }
+            };
+          }
+        }
+        
+        // If no adjustment needed, just update rotation and width
+        return {
+          ...shape,
+          rotation: newRotation,
+          shapeMaxWidth: shapeMaxWidth
+        };
+      }
+
+      return shape;
+
+    }));
   };
 
   return (

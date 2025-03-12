@@ -212,62 +212,75 @@ function App() {
     const shapeMatrix = getShapeMatrix(shape.type, shape.rotation);
     const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
     // console.log("Grid: ", gridX, gridY);
-    setGrid(prev => {
-      const newGrid = [...prev.map(row => [...row])];
-      for (let row = 0; row < shapeMatrix.length; row++) {
-        for (let col = 0; col < shapeMatrix[row].length; col++) {
-          if (shapeMatrix[row][col] === '#') {
-            const newX = gridX + col ;
-            const newY = gridY - row + shapeMatrix.length;
-            // console.log(newX, newY);
-            if (newX >= 0 && newX < 10 && newY >= 0 && newY <= (20+shapeMatrix.length)) {
-              if (newY <= 20) {
-                newGrid[newY][newX] = { occupied: true, shapeId: id };
-              }
-            } 
-          }
-        }
+
+    // Adding landed shape to grid
+    const updatedGrid = addShapeToGrid(grid, shape, shapeMatrix, gridX, gridY);
+    setGrid(updatedGrid);
+    console.log("Landed Grid: ", updatedGrid, grid)
+    
+    // Finding completed Row
+    const completedRows: number[] = [];
+    for (let row = 0; row < updatedGrid.length; row++) {
+      if (updatedGrid[row].every(cell => cell.occupied)) {
+        completedRows.push(row);
       }
+    }
 
-      const completedRows: number[] = [];
-      for (let row = 0; row < newGrid.length; row++) {
-        if (newGrid[row].every(cell => cell.occupied)) {
-          completedRows.push(row);
-        }
-      }
-  
-      console.log("Grid: ", newGrid)
+    // Process one row at a time
+    if (completedRows.length > 0) {
+      let currentGrid = [...updatedGrid];
+      let currentShapes = [...shapes];
 
-      // If there are completed rows, process them
-      if (completedRows.length > 0) {
-        // Process each completed row from bottom to top
-        completedRows.sort((a, b) => b - a).forEach(completedRow => {
-          
-          // Update shapes that intersect with the row
-          const updatedShapes = updateShapesForRow(completedRow, newGrid, shapes);
-          setShapes(updatedShapes);
+      completedRows.sort((a, b) => b - a).forEach(completedRow => {
+        // Update shapes for this row
+        currentShapes = updateShapesForRow(completedRow, currentGrid, currentShapes);
+        
+        // Update grid for this row
+        currentGrid = updateGridForRow(completedRow, currentGrid, currentShapes)
+      });
+      setShapes(currentShapes);
+      setGrid(currentGrid);
+      console.log("Completed: ", grid, shapes)
 
-          // Remove the completed row and add new empty row at top
-          newGrid.splice(completedRow, 1);
-          newGrid.unshift(Array(10).fill({ occupied: false, shapeId: null }));
-        });
-      }
-      
-      console.log("NEW GRID: ",  newGrid)
-      return newGrid;
-    });
-
-
-    // Update landed shape
-    setShapes(prev => prev.map(shape =>
-      shape.id === id
-        ? { ...shape, hasLanded: true }
-        : shape
+    }
+    
+    // Update landed state and spawn new shape
+    setShapes(prev => prev.map(s =>
+      s.id === id ? { ...s, hasLanded: true } : s
     ));
-
-    // Spawn new shape
     spawnNewShape();
+  }
+
+
+  const addShapeToGrid = (
+    currentGrid: GridCell[][], 
+    shape: ShapeState, 
+    shapeMatrix: string[], 
+    gridX: number, 
+    gridY: number
+  ): GridCell[][] => {
+
+    const newGrid = [...currentGrid.map(row => [...row])];
+    
+    for (let row = 0; row < shapeMatrix.length; row++) {
+      for (let col = 0; col < shapeMatrix[row].length; col++) {
+        if (shapeMatrix[row][col] === '#') {
+          const newX = gridX + col ;
+          const newY = gridY - row + shapeMatrix.length;
+          // console.log(newX, newY);
+          if (newX >= 0 && newX < 10 && newY >= 0 && newY <= (20+shapeMatrix.length)) {
+            if (newY <= 20) {
+              newGrid[newY][newX] = { occupied: true, shapeId: shape.id };
+            }
+          } 
+        }
+      }
+    }  
+
+    
+    return newGrid;
   };
+  
 
   const updateShapesForRow = (
     completedRow: number, 
@@ -308,7 +321,6 @@ function App() {
             }
           }
           newMatrix[row] = matrixRow.join('');
-          console.log("New Matrix: ", newMatrix)
         }
       }
 
@@ -330,6 +342,8 @@ function App() {
       // Calculate new position if top rows were removed
       const yOffset = matrix.length - newMatrix.length;
       const newY = shape.position.y
+
+      
   
       // Return updated shape
       return {
@@ -342,6 +356,51 @@ function App() {
         }
       };
     }).filter(shape => !shape.removed);
+  };
+
+  // Pure function to update grid for a completed row
+  const updateGridForRow = (
+    completedRow: number, 
+    currentGrid: GridCell[][], 
+    shapes: ShapeState[]
+  ): GridCell[][] => {
+    const newGrid = [...currentGrid.map(row => [...row])];
+    
+    // Remove completed row and add empty row at top
+    newGrid.splice(completedRow, 1);
+    newGrid.unshift(Array(10).fill({ occupied: false, shapeId: null }));
+
+    // Clear all existing shape positions
+    for (let row = 0; row < newGrid.length; row++) {
+      for (let col = 0; col < newGrid[row].length; col++) {
+        newGrid[row][col] = { occupied: false, shapeId: null };
+      }
+    }
+
+    // Update grid with current shape positions
+    shapes.forEach(shape => {
+      if (!shape.hasLanded) return;
+
+      const matrix = shape.type === 'custom' && shape.customMatrix 
+        ? shape.customMatrix 
+        : getShapeMatrix(shape.type, shape.rotation);
+      
+      const [shapeGridX, shapeGridY] = worldToGrid(shape.position.x, shape.position.y);
+      
+      for (let row = 0; row < matrix.length; row++) {
+        for (let col = 0; col < matrix[row].length; col++) {
+          if (matrix[row][col] === '#') {
+            const newX = shapeGridX + col;
+            const newY = shapeGridY - row;
+            if (newX >= 0 && newX < 10 && newY >= 0 && newY < 20) {
+              newGrid[newY][newX] = { occupied: true, shapeId: shape.id };
+            }
+          }
+        }
+      }
+    });
+
+    return newGrid;
   };
 
   const handleUpdatePosition = (id: number, x: number, y: number) => {

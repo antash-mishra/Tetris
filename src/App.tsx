@@ -27,6 +27,7 @@ type ShapeState = {
   rotation: number,
   shapeMaxWidth: number,
   customMatrix?: string[],
+  cells?: { x: number; y: number }[]; // Stores exact occupied grid positions
   removed?: boolean
 }
 
@@ -118,7 +119,7 @@ function App() {
   const [shapes, setShapes] = useState<ShapeState[]>([]);
   const [nextId, setNextId] = useState(1);
   const [isInitialized, setIsInitialized] = useState(false);
-  const shapeTypes: ShapeType[] = ['T', 'L', 'I', 'O', 'S', 'Z', 'J'];
+  const shapeTypes: ShapeType[] = ['T', 'L', 'I', 'O', 'J', 'S', 'Z'];
 
   // Crate Grid to track occupied cells (20 rows, 10 columns)
   const [grid, setGrid] = useState<GridCell[][]>(Array.from({ length: 20 }, () => Array(10).fill({ occupied: false, shapeId: null })));
@@ -195,7 +196,7 @@ function App() {
       position: { x: -0.5, y: 2.5, z: 0 },
       hasLanded: false,
       rotation: 0,
-      shapeMaxWidth: Math.max(...Figures[randomType].map((row, indexX) => {
+      shapeMaxWidth: Math.max(...Figures[randomType].map((row) => {
         return row.split('').length
       }).values())
     };
@@ -204,50 +205,116 @@ function App() {
     setNextId(prev => prev + 1);
   };
 
+  // Function to check for completed rows in the grid
+  const checkCompletedRows = (currentGrid: GridCell[][]): number[] => {
+    const completedRows: number[] = [];
+    
+    // Check each row in the grid
+    for (let row = 0; row < currentGrid.length; row++) {
+      // If every cell in the row is occupied, it's a completed row
+      if (currentGrid[row].every(cell => cell.occupied)) {
+        completedRows.push(row);
+      }
+    }
+    
+    // Return array of completed row indices (sorted from bottom to top)
+    return completedRows.sort((a, b) => b - a);
+  };
+
   const handleShapeLanded = (id: number) => {
 
     const shape = shapes.find(shape => shape.id === id);
     if (!shape) return;
 
+
     const shapeMatrix = getShapeMatrix(shape.type, shape.rotation);
     const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
     // console.log("Grid: ", gridX, gridY);
 
-    // Adding landed shape to grid
-    const updatedGrid = addShapeToGrid(grid, shape, shapeMatrix, gridX, gridY);
-    setGrid(updatedGrid);
-    console.log("Landed Grid: ", updatedGrid, grid)
-    
-    // Finding completed Row
-    const completedRows: number[] = [];
-    for (let row = 0; row < updatedGrid.length; row++) {
-      if (updatedGrid[row].every(cell => cell.occupied)) {
-        completedRows.push(row);
+    // Calculate exact grid positions for the shape
+    const shapeCells: { x: number; y: number }[] = [];
+    for (let row = 0; row < shapeMatrix.length; row++) {
+      for (let col = 0; col < shapeMatrix[row].length; col++) {
+        if (shapeMatrix[row][col] === '#') {
+          const cellX = gridX + col;
+          const cellY = gridY - row + shapeMatrix.length;
+          if (cellX >= 0 && cellX < 10 && cellY >= 0 && cellY < 20) {
+            shapeCells.push({ x: cellX, y: cellY });
+          }
+        }
       }
     }
 
-    // Process one row at a time
-    if (completedRows.length > 0) {
-      let currentGrid = [...updatedGrid];
-      let currentShapes = [...shapes];
+    console.log("shapeCells: ", shapeCells)
 
-      completedRows.sort((a, b) => b - a).forEach(completedRow => {
-        // Update shapes for this row
-        currentShapes = updateShapesForRow(completedRow, currentGrid, currentShapes);
-        
-        // Update grid for this row
-        currentGrid = updateGridForRow(completedRow, currentGrid, currentShapes)
-      });
-      setShapes(currentShapes);
-      setGrid(currentGrid);
-      console.log("Completed: ", grid, shapes)
-
-    }
+    // Create landed shape with cells data
+    const landedShape = { 
+      ...shape, 
+      hasLanded: true,
+      cells: shapeCells 
+    };
     
-    // Update landed state and spawn new shape
-    setShapes(prev => prev.map(s =>
-      s.id === id ? { ...s, hasLanded: true } : s
-    ));
+    // First update the landed state of the current shape
+    const updatedShapes = shapes.map(s =>
+      s.id === id ? landedShape : s
+    );
+
+
+    // Adding landed shape to grid
+    const updatedGrid = addShapeToGrid(grid, shape, shapeMatrix, gridX, gridY);
+    setGrid(updatedGrid);
+    setShapes(updatedShapes);
+    
+  }
+
+  useEffect (() => {
+    if (shapes.some(shape => shape.hasLanded)) {
+      const completedRows = checkCompletedRows(grid);
+      if (completedRows.length > 0) {
+        handleCompletedRows(completedRows);
+      } else {
+        // Only spawn a new shape if we don't already have an active (non-landed) shape
+        const hasActiveShape = shapes.some(shape => !shape.hasLanded);
+        
+        // Add some delay before spawning new shape
+        if (!hasActiveShape ) {
+          setTimeout(() => {
+            spawnNewShape();
+          }, 500);
+          return; // Exit early to avoid double spawn
+        }
+      } 
+    }  
+  }, [shapes, grid])
+    
+
+  const handleCompletedRows = (completedRows: number[])  => {
+    if (completedRows.length === 0) return;
+
+    let currentGrid = [...grid];
+    let currentShapes = [...shapes];
+
+    completedRows.sort((a, b) => b - a).forEach(completedRow => {
+      // Update shapes for this row
+      currentShapes = updateShapesForRow(completedRow, currentGrid, currentShapes);
+      console.log("Shapes 1 : ", currentShapes)
+      
+      // Update grid for this row
+      currentGrid = updateGridForRow(completedRow, currentGrid, currentShapes)
+      console.log("Shapes 2: ", currentGrid)
+
+      // Finally move shapes down
+      const { shapes, grid } = moveShapesDown(completedRow, currentShapes, currentGrid);
+      currentShapes = shapes;
+      currentGrid = grid;
+  
+      console.log("After Grid update: ", currentShapes, currentGrid)
+    });
+
+    setShapes(currentShapes);
+    setGrid(currentGrid);
+    
+    // SPawn new shape after completed row
     spawnNewShape();
   }
 
@@ -290,18 +357,26 @@ function App() {
     // Update shapes that have blocks in completed rows
     return currentShapes.map(shape => {
       if (!shape.hasLanded) return shape;
-  
+      
+      // Check if this shape has any cells in the completed row
+      const hasBlocksInCompletedRow = shape.cells?.some(cell => (cell.y) === completedRow);
+      if (!hasBlocksInCompletedRow) return shape;  
+      
       // Get the shape matrix, considering custom matrices
       const matrix = shape.type === 'custom' && shape.customMatrix 
         ? shape.customMatrix 
         : getShapeMatrix(shape.type, shape.rotation);
-  
+      
+      console.log("Matrix: ", matrix)
+
+      // Get the grid position of the shape
       const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
-  
+      console.log("Grid: ", gridX, gridY)
+      
       // Creating matrix with removed blocks
       let newMatrix = [...matrix];
       let modified = false;
-
+      
       // Check each cell in the shape matrix
       for (let row = (matrix.length - 1); row >= 0; row--) {
         const gridRowPosition = (gridY+1) - (matrix.length - 1 - row);
@@ -330,6 +405,7 @@ function App() {
       while (newMatrix.length > 0 && newMatrix[0].trim() === '') {
         newMatrix.shift();
       }
+
       while (newMatrix.length > 0 && newMatrix[newMatrix.length - 1].trim() === '') {
         newMatrix.pop();
       }
@@ -339,24 +415,23 @@ function App() {
         return { ...shape, removed: true };
       }
   
-      // Calculate new position if top rows were removed
-      const yOffset = matrix.length - newMatrix.length;
-      const newY = shape.position.y
+      // Update cells array to remove cleared blocks
+      const updatedCells = shape.cells?.filter(cell => (cell.y) !== completedRow) || [];
 
-      
-  
-      // Return updated shape
+      // Return shape with updated matrix and cells, but same position
       return {
         ...shape,
         type: 'custom' as ShapeType,
         customMatrix: newMatrix,
-        position: {
+        position: { 
           ...shape.position,
-          y: newY
-        }
+          y: shape.position.y + 0.25
+        },
+        cells: updatedCells,
       };
     }).filter(shape => !shape.removed);
   };
+
 
   // Pure function to update grid for a completed row
   const updateGridForRow = (
@@ -366,41 +441,86 @@ function App() {
   ): GridCell[][] => {
     const newGrid = [...currentGrid.map(row => [...row])];
     
-    // Remove completed row and add empty row at top
+    // Remove completed row
     newGrid.splice(completedRow, 1);
+    
+    // Add new empty row at top
     newGrid.unshift(Array(10).fill({ occupied: false, shapeId: null }));
+  
+    return newGrid;
+  };
 
-    // Clear all existing shape positions
-    for (let row = 0; row < newGrid.length; row++) {
+  // Function to handle falling motion
+  const moveShapesDown = (
+    completedRow: number,
+    shapes: ShapeState[],
+    currentGrid: GridCell[][]
+  ): { shapes: ShapeState[], grid: GridCell[][] } => {
+    const newGrid = [...currentGrid.map(row => [...row])];
+    
+    // First clear all cells above the completed row
+    for (let row = completedRow + 1; row < newGrid.length; row++) {
       for (let col = 0; col < newGrid[row].length; col++) {
         newGrid[row][col] = { occupied: false, shapeId: null };
       }
     }
-
-    // Update grid with current shape positions
-    shapes.forEach(shape => {
-      if (!shape.hasLanded) return;
-
-      const matrix = shape.type === 'custom' && shape.customMatrix 
-        ? shape.customMatrix 
-        : getShapeMatrix(shape.type, shape.rotation);
+  
+    // Update shapes and fill new grid positions
+    const updatedShapes = shapes.map(shape => {
+      if (!shape.hasLanded) return shape;
+  
+      // Check if ALL cells of this shape are above the completed row
+      const allCellsAbove = shape.cells?.every(cell => cell.y > completedRow);
+      const anyCellsAbove = shape.cells?.some(cell => cell.y > completedRow);
       
-      const [shapeGridX, shapeGridY] = worldToGrid(shape.position.x, shape.position.y);
-      
-      for (let row = 0; row < matrix.length; row++) {
-        for (let col = 0; col < matrix[row].length; col++) {
-          if (matrix[row][col] === '#') {
-            const newX = shapeGridX + col;
-            const newY = shapeGridY - row;
-            if (newX >= 0 && newX < 10 && newY >= 0 && newY < 20) {
-              newGrid[newY][newX] = { occupied: true, shapeId: shape.id };
-            }
+      if (!anyCellsAbove) {
+        // If shape is entirely below or at completed row, just update its grid positions
+        shape.cells?.forEach(cell => {
+          if (cell.x >= 0 && cell.x < 10 && cell.y >= 0 && cell.y < 20) {
+            newGrid[cell.y][cell.x] = { occupied: true, shapeId: shape.id };
           }
-        }
+        });
+        return shape;
       }
+      
+      if (allCellsAbove) {
+        // If shape is entirely above completed row, move it down
+        const updatedCells = shape.cells?.map(cell => ({
+          x: cell.x,
+          y: cell.y - 1
+        }));
+  
+        const updatedShape = {
+          ...shape,
+          position: {
+            ...shape.position,
+            y: shape.position.y - 0.25
+          },
+          cells: updatedCells
+        };
+  
+        // Fill new grid positions
+        updatedShape.cells?.forEach(cell => {
+          if (cell.x >= 0 && cell.x < 10 && cell.y >= 0 && cell.y < 20) {
+            newGrid[cell.y][cell.x] = { occupied: true, shapeId: shape.id };
+          }
+        });
+  
+        return updatedShape;
+      }
+      
+      // If shape has some cells above and some at/below completed row,
+      // don't move it, just update grid positions
+      shape.cells?.forEach(cell => {
+        if (cell.x >= 0 && cell.x < 10 && cell.y >= 0 && cell.y < 20) {
+          newGrid[cell.y][cell.x] = { occupied: true, shapeId: shape.id };
+        }
+      });
+      
+      return shape;
     });
-
-    return newGrid;
+  
+    return { shapes: updatedShapes, grid: newGrid };
   };
 
   const handleUpdatePosition = (id: number, x: number, y: number) => {

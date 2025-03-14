@@ -119,7 +119,7 @@ function App() {
   const [shapes, setShapes] = useState<ShapeState[]>([]);
   const [nextId, setNextId] = useState(1);
   const [isInitialized, setIsInitialized] = useState(false);
-  const shapeTypes: ShapeType[] = ['T', 'L', 'I', 'O', 'J', 'S', 'Z'];
+  const shapeTypes: ShapeType[] = ['T', 'L', 'I', 'O', 'J'];
 
   // Crate Grid to track occupied cells (20 rows, 10 columns)
   const [grid, setGrid] = useState<GridCell[][]>(Array.from({ length: 20 }, () => Array(10).fill({ occupied: false, shapeId: null })));
@@ -245,8 +245,6 @@ function App() {
       }
     }
 
-    console.log("shapeCells: ", shapeCells)
-
     // Create landed shape with cells data
     const landedShape = { 
       ...shape, 
@@ -297,11 +295,9 @@ function App() {
     completedRows.sort((a, b) => b - a).forEach(completedRow => {
       // Update shapes for this row
       currentShapes = updateShapesForRow(completedRow, currentGrid, currentShapes);
-      console.log("Shapes 1 : ", currentShapes)
       
       // Update grid for this row
       currentGrid = updateGridForRow(completedRow, currentGrid, currentShapes)
-      console.log("Shapes 2: ", currentGrid)
 
       // Finally move shapes down
       const { shapes, grid } = moveShapesDown(completedRow, currentShapes, currentGrid);
@@ -315,7 +311,7 @@ function App() {
     setGrid(currentGrid);
     
     // SPawn new shape after completed row
-    spawnNewShape();
+    // spawnNewShape();
   }
 
 
@@ -367,11 +363,9 @@ function App() {
         ? shape.customMatrix 
         : getShapeMatrix(shape.type, shape.rotation);
       
-      console.log("Matrix: ", matrix)
 
       // Get the grid position of the shape
       const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
-      console.log("Grid: ", gridX, gridY)
       
       // Creating matrix with removed blocks
       let newMatrix = [...matrix];
@@ -545,43 +539,47 @@ function App() {
         
         // Get the rotated shape matrix and width
         const rotatedMatrix = getShapeMatrix(shape.type, newRotation);
-                // Calculate max width properly by counting only non-space characters
+        
+        // Calculate max width properly by counting only non-space characters
         const shapeMaxWidth = Math.max(...rotatedMatrix.map(row => {
           // Trim trailing spaces and count length
           return row.trimEnd().length;
         }));
 
-        // Get current shape width
-        const currentMatrix = getShapeMatrix(shape.type, shape.rotation);
-        const currentWidth = Math.max(...currentMatrix.map(row => row.trimEnd().length));
+        let newX = shape.position.x; // => 0.75
+        const rightBoundary = 1.0 - ((shapeMaxWidth - 1) * 0.25); // => 0.25
+  
+        // If rotation would cause out of bounds, adjust position if possible
+        if (newX > rightBoundary) {
+          while(newX > rightBoundary && newX >= -1.25) {
+            newX -= 0.25;
 
-        // Only check boundaries if the width actually changes
-        if (shapeMaxWidth !== currentWidth) {
-          // Check if rotation would cause the shape to go out of bounds
-          const newX = shape.position.x; // => 0.75
-          const rightBoundary = 1.0 - ((shapeMaxWidth - 1) * 0.25); // => 0.25
-          
-          // If rotation would cause out of bounds, adjust position if possible
-          if (newX > rightBoundary && rightBoundary >= -1.25) {
-            console.log("Right Boundary: ", rightBoundary, newX, shapeMaxWidth, currentWidth, newRotation,  rotatedMatrix)  
-            return {
-              ...shape,
-              rotation: newRotation,
-              shapeMaxWidth: shapeMaxWidth,
-              position: {
-                ...shape.position,
-                x: rightBoundary
-              }
-            };
+            if(isValidPosition(shape.type, newX, shape.position.y, newRotation)) {
+              return {
+                ...shape,
+                rotation: newRotation,
+                shapeMaxWidth: shapeMaxWidth,
+                position: {
+                  ...shape.position,
+                  x: newX
+                }
+              };
+            }
           }
+          return shape;
         }
         
-        // If no adjustment needed, just update rotation and width
-        return {
-          ...shape,
-          rotation: newRotation,
-          shapeMaxWidth: shapeMaxWidth
-        };
+
+        // Check if the rotation is valid in current position
+        if (isValidPosition(shape.type, newX, shape.position.y, newRotation)) {
+          return {
+            ...shape,
+            rotation: newRotation,
+            shapeMaxWidth: shapeMaxWidth
+          };
+        }
+        return shape;
+
       }
 
       return shape;

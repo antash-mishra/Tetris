@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import './App.css'
 import Tetris from './Tetris'
 import { Shape } from './components/Shape'
-import { TransformControls, OrbitControls, PivotControls } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { ShapeType } from './components/Shape'
 import { Figures } from './components/figures'
-
+import { useDrag, useGesture } from '@use-gesture/react';
+import SwipePlane from './components/SwipePlane'
+import TetrisLights from './components/TetrisLights'
 
 type GridCell = {
   occupied: boolean,
@@ -32,6 +34,8 @@ type ShapeState = {
 
 const BOARD_HEIGHT = 5;
 const CELL_SIZE = 0.25;
+
+
 
 function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }: {
   shapeState: ShapeState,
@@ -621,24 +625,38 @@ function App() {
     }));
   };
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const scaleFactor = isMobile ? 0.7  : 1.0;
+
   useEffect(() => {
     // Focus the canvas when the component mounts
     if (canvasRef.current) {
       canvasRef.current.focus();
     }
+
+    // Handle window resize for mobile detection
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Use useRef for persisting values between renders
-  const touchStartPos = useRef({ x: 0, y: 0 });
-  const lastMoveTime = useRef(0);
-  const isDragging = useRef(false);
 
   return (
     <>
-      <Canvas
+
+      <Canvas shadows
         ref={canvasRef}
         tabIndex={0} // Make canvas focusable
-        style={{ outline: 'none', touchAction: 'none' }} // Disable browser touch actions
+        style={{ 
+          outline: 'none', 
+          touchAction: 'none',           
+          width: '100%',
+          height: '100%'
+           
+        }} // Disable browser touch actions
         orthographic
         camera={{
           position: [0, 0, 10],
@@ -647,77 +665,17 @@ function App() {
           far: 1000,
           zoom: 200
         }}
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          const activeShape = shapes.find(s => !s.hasLanded);
-          if (!activeShape) return;
-          
-          // Store start position in ref
-          touchStartPos.current = { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY };
-          lastMoveTime.current = Date.now();
-          isDragging.current = true;
-        }}
-        onPointerMove={(e) => {
-          if (!isDragging.current) return;
-          
-          const activeShape = shapes.find(s => !s.hasLanded);
-          if (!activeShape) return;
-          
-          const now = Date.now();
-          if (now - lastMoveTime.current < 100) return; // Less aggressive throttle
-          
-          const deltaX = e.nativeEvent.clientX - touchStartPos.current.x;
-          const deltaY = e.nativeEvent.clientY - touchStartPos.current.y;
-    
-          // console.log("Delta X:", deltaX, "Position:", activeShape.position.x, "Bounds:", {
-          //   min: -1.25,
-          //   max: 1.0 - ((activeShape.shapeMaxWidth - 1)*0.25)
-          // });
-          
-          
-          
-          if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 0) {
-            // Handle horizontal movement
-            if (deltaX > 10) {
-              console.log("Right: ", activeShape.id, activeShape.position.x + 0.25);
-              handleUpdatePosition(
-                activeShape.id,
-                Math.min(1.0 - ((activeShape.shapeMaxWidth - 1)*0.25), activeShape.position.x + 0.25),
-                activeShape.position.y
-              );
-            } else if (deltaX < -10) {
-              console.log("Left: ", activeShape.id);
-              handleUpdatePosition(
-                activeShape.id,
-                Math.max(-1.25, activeShape.position.x - 0.25),
-                activeShape.position.y
-              );
-            }
-            // Reset after processing
-            touchStartPos.current = { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY };
-            lastMoveTime.current = now;
-          } else if (Math.abs(deltaY) > 50) { // Less strict threshold
-            if (deltaY > 0) {
-              // Speed up falling - try direct function call instead of event dispatch
-              // document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
-            } else {
-              handleRotate();
-            }
-            // Reset after processing
-            touchStartPos.current = { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY };
-            lastMoveTime.current = now;
-          }
-        }}
-        onPointerUp={(e) => {
-          if (!isDragging.current) return;
-          
-          const deltaX = Math.abs(e.nativeEvent.clientX - touchStartPos.current.x);
-          const deltaY = Math.abs(e.nativeEvent.clientY - touchStartPos.current.y);
-          
-          isDragging.current = false;
-        }}
-        onPointerCancel={() => { isDragging.current = false; }}
       >
+
+        <TetrisLights />
+
+        <group scale={[scaleFactor, scaleFactor, 1]}>
+
+        <SwipePlane 
+          shape={shapes.find(s => !s.hasLanded)} 
+          onUpdatePosition={handleUpdatePosition} 
+          onRotate={handleRotate} 
+        />
         <Tetris />
         {shapes.map((shape, index) => (
           <ShapeMovement
@@ -727,7 +685,8 @@ function App() {
             onUpdatePosition={handleUpdatePosition}
             onRotate={handleRotate}
           />
-        ))}        
+        ))}
+        </group>        
         <OrbitControls enableRotate={false} enablePan={false} />
       </Canvas>
     </>

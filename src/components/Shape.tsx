@@ -114,23 +114,53 @@ export class Shape extends Component<{
   }
 }
 
-function TetrisBlock({x, y}: {x: number, y: number}) {
-  const [prevPos, setPrevPos] = useState({x, y});
-  const {position} = useSpring({
-    from: {position: [prevPos.x, prevPos.y, 0.1]},
-    to: {position: [x, y, 0.1]},
-    config: {mass: 0.5, tension: 180, friction:24}
+function TetrisBlock({ x, y }: { x: number, y: number }) {
+  const [prevPos, setPrevPos] = useState({ x, y });
+  const { position } = useSpring({
+    from: { position: [prevPos.x, prevPos.y, 0.1] },
+    to: { position: [x, y, 0.1] },
+    config: { mass: 0.5, tension: 180, friction: 24 }
   });
+  
   useEffect(() => {
-    setPrevPos({x, y});
+    setPrevPos({ x, y });
   }, [x, y]);
   
+  // Add hover effect
+  const [hovered, setHovered] = useState(false);
+  const { emissiveIntensity } = useSpring({
+    emissiveIntensity: hovered ? 0.5 : 0,
+    config: { mass: 1, tension: 280, friction: 60 }
+  });
+  
   return (
-    <animated.mesh position={position}>
-      <planeGeometry args={[0.23, 0.23, 32, 32]} />
-      <meshBasicMaterial color="red" />
+    <animated.mesh 
+      position={position}
+      onPointerOver={() => setHovered(true)}
+      onPointerOut={() => setHovered(false)}
+    >
+      <boxGeometry args={[0.23, 0.23, 0.05]} />
+      <animated.meshStandardMaterial 
+        color="#FF8E00"
+        emissive="#FF8E00"
+        emissiveIntensity={emissiveIntensity}
+        roughness={0.3}
+        metalness={0.2}
+      />
+      
+      {/* Top beveled edge for 3D effect */}
+      <mesh position={[0, 0, 0.03]} rotation={[0, 0, 0]}>
+        <ringGeometry args={[0.09, 0.115, 4]} />
+        <meshBasicMaterial 
+          color="#FFB04D" 
+          transparent={true} 
+          opacity={0.6} 
+        />
+      </mesh>
     </animated.mesh>
   );
 }
+
+
 
 export default Shape

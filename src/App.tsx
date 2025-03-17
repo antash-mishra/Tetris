@@ -1,14 +1,13 @@
-import { useState, useRef, useEffect } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { Canvas, events, useFrame, useThree } from '@react-three/fiber'
 import './App.css'
 import Tetris from './Tetris'
 import { Shape } from './components/Shape'
-import { TransformControls, OrbitControls, PivotControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { ShapeType } from './components/Shape'
 import { Figures } from './components/figures'
-import { update } from 'three/examples/jsm/libs/tween.module.js'
-
+import TetrisLights from './components/TetrisLights'
+import { time } from 'three/tsl'
 
 type GridCell = {
   occupied: boolean,
@@ -28,11 +27,21 @@ type ShapeState = {
   shapeMaxWidth: number,
   customMatrix?: string[],
   cells?: { x: number; y: number }[]; // Stores exact occupied grid positions
-  removed?: boolean
+  removed?: boolean,
 }
 
 const BOARD_HEIGHT = 5;
 const CELL_SIZE = 0.25;
+
+// Debounce function to limit how often a function can be called
+function debounce(func: Function, wait: number) {
+  let timeout: ReturnType<typeof setTimeout>;
+  return function(...args: any[]) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+
 
 function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }: {
   shapeState: ShapeState,
@@ -46,40 +55,48 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
   const hasLandedRef = useRef(false);
   const startY = 2.5;
   const endY = -2.75;
-  const speed = 0.5;
+  const speed = 0.1;
+
+  const debouncedUpdatePosition = useCallback(debounce(onUpdatePosition, 50), [onUpdatePosition]);
 
   // Handle keyboard controls
   useEffect(() => {
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (shapeState.hasLanded) return;
       switch (event.key) {
         case 'ArrowLeft':
+          console.log("Arrow left")
           // Move left, but not beyond left boundary (-1.25)
-          onUpdatePosition(
+          debouncedUpdatePosition(
             shapeState.id,
             Math.max(-1.25, shapeState.position.x - 0.25),
             shapeState.position.y
           );
           break;
         case 'ArrowRight':
-          // Move right, but not beyond right boundary (0.50)
-          onUpdatePosition(
+          console.log("Arrow right:", shapeState.position.x, shapeState.id, shapeState.shapeMaxWidth)         // Move right, but not beyond right boundary (0.50)
+          debouncedUpdatePosition(
             shapeState.id,
             Math.min(1.0 - ((shapeState.shapeMaxWidth - 1)*0.25) , shapeState.position.x + 0.25),
             shapeState.position.y
           );
+
+          console.log("Arrow right 1:", shapeState.position.x, shapeState.id)
           break;
 
         case 'ArrowUp':
           onRotate();
+          break;
+
+        case 'ArrowDown':
+          startTime.current.elapsedTime += 0.2;
           break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shapeState]);
+  }, [event]);
 
   useFrame((state, delta) => {
 
@@ -106,11 +123,16 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
   });
 
   return (
-    <group
-      ref={shape}
-      position={[shapeState.position.x, shapeState.position.y, shapeState.position.z]}>
-      <Shape shapeType={shapeState.type} rotation={shapeState.rotation} customMatrix={shapeState.customMatrix} />
-    </group>
+    <>
+      <group
+        ref={shape}
+        position={[shapeState.position.x, shapeState.position.y, shapeState.position.z]}>
+        <Shape 
+          shapeType={shapeState.type} 
+          rotation={shapeState.rotation} 
+          customMatrix={shapeState.customMatrix} />
+      </group>
+    </>
   );
 }
 
@@ -120,6 +142,7 @@ function App() {
   const [nextId, setNextId] = useState(1);
   const [isInitialized, setIsInitialized] = useState(false);
   const shapeTypes: ShapeType[] = ['T', 'L', 'I', 'O', 'J'];
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Crate Grid to track occupied cells (20 rows, 10 columns)
   const [grid, setGrid] = useState<GridCell[][]>(Array.from({ length: 20 }, () => Array(10).fill({ occupied: false, shapeId: null })));
@@ -286,33 +309,33 @@ function App() {
   }, [shapes, grid])
     
 
-  const handleCompletedRows = (completedRows: number[])  => {
+  const handleCompletedRows = async (completedRows: number[]) => {
     if (completedRows.length === 0) return;
-
-    let currentGrid = [...grid];
-    let currentShapes = [...shapes];
-
-    completedRows.sort((a, b) => b - a).forEach(completedRow => {
+  
+    // Process rows from bottom to top
+    for (const completedRow of completedRows.sort((a, b) => b - a)) {
       // Update shapes for this row
-      currentShapes = updateShapesForRow(completedRow, currentGrid, currentShapes);
+      const updatedShapes = updateShapesForRow(completedRow, grid, shapes);
       
       // Update grid for this row
-      currentGrid = updateGridForRow(completedRow, currentGrid, currentShapes)
-
-      // Finally move shapes down
-      const { shapes, grid } = moveShapesDown(completedRow, currentShapes, currentGrid);
-      currentShapes = shapes;
-      currentGrid = grid;
+      const updatedGrid = updateGridForRow(completedRow, grid, updatedShapes);
   
-      console.log("After Grid update: ", currentShapes, currentGrid)
-    });
-
-    setShapes(currentShapes);
-    setGrid(currentGrid);
-    
-    // SPawn new shape after completed row
-    // spawnNewShape();
-  }
+      // Move shapes down
+      const { shapes: movedShapes, grid: movedGrid } = moveShapesDown(
+        completedRow, 
+        updatedShapes, 
+        updatedGrid
+      );
+  
+      // Update state and wait for it to complete
+      await new Promise<void>(resolve => {
+        setShapes(movedShapes);
+        setGrid(movedGrid);
+        // Use setTimeout to ensure state updates are processed
+        setTimeout(resolve, 100); // Small delay between row updates
+      });
+    }
+  };
 
 
   const addShapeToGrid = (
@@ -340,7 +363,6 @@ function App() {
       }
     }  
 
-    
     return newGrid;
   };
   
@@ -519,14 +541,28 @@ function App() {
 
   const handleUpdatePosition = (id: number, x: number, y: number) => {
 
-    const shape = shapes.find(shape => shape.id === id);
-    if (!shape || shape.hasLanded) return;
-    
-    if (isValidPosition(shape.type, x, y, shape.rotation)) {
-      setShapes(prev => prev.map(shape =>
-        shape.id === id ? { ...shape, position: { ...shape.position, x, y } } : shape
-      ));
-    }
+    setShapes(prevShapes => {
+      const shape = prevShapes.find(shape => shape.id === id);
+
+      if (!shape || shape.hasLanded) return prevShapes;
+  
+      if (isValidPosition(shape.type, x, y, shape.rotation)) {
+        return prevShapes.map(shape => {
+          if (shape.id === id) {
+            return {
+              ...shape,
+              position: {
+                ...shape.position,
+                x: x,
+                y: y
+              }
+            };
+          }
+          return shape;
+        });
+      }
+      return prevShapes;
+    });
   };
 
   const handleRotate = () => {
@@ -587,9 +623,100 @@ function App() {
     }));
   };
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const scaleFactor = isMobile ? 0.7  : 1.0;
+ 
+
+  useEffect(() => {
+    // Focus the canvas when the component mounts
+    if (canvasRef.current) {
+      canvasRef.current.focus();
+    }
+
+    // Handle window resize for mobile detection
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Use useRef for persisting values between renders
+  // const touchClock = useRef(new THREE.Clock());
+  // const touchState = useRef({
+  //   startX: 0,
+  //   startY: 0,
+  //   lastX: 0,
+  //   lastY: 0,
+  //   accumulatedDeltaX: 0,
+  //   isTracking: false,
+  //   lastMoveTime: 0,
+  //   activeShapeId: null
+  // });
+
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+
+  
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+  
+  const handleTouchMove = (e) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+  
+  const handleTouchEnd = useCallback(debounce(() => {
+    // Perform one final move if we have significant accumulated delta
+    const deltaX = touchEndX.current - touchStartX.current;
+    const activeShape = shapes.find(shape => !shape.hasLanded);
+  
+    if (Math.abs(deltaX) > 30 && activeShape) {
+      handleUpdatePosition(
+        activeShape.id,
+        deltaX > 0
+          ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1) * 0.25), activeShape.position.x + 0.25)
+          : Math.max(-1.25, activeShape.position.x - 0.25),
+        activeShape.position.y
+      );
+    }
+  }, 50), [shapes, handleUpdatePosition]);
+  
+  
+  
+  // Add a double tap handler for rotation
+  const handleDoubleTap = () => {
+    const activeShape = shapes.find(shape => !shape.hasLanded);
+    if (activeShape) {
+      handleRotate();
+    }
+  };
+
+
   return (
     <>
-      <Canvas
+
+  <div
+        style={{ width: "100vw", height: "100vh", touchAction: "none" }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onDoubleClick={handleDoubleTap}
+      >
+
+
+      <Canvas shadows
+        ref={canvasRef}
+        tabIndex={0} // Make canvas focusable
+        style={{ 
+          outline: 'none', 
+          touchAction: 'none', // Disable browser touch actions      
+          width: '100%',
+          height: '100%',
+          userSelect: 'none' // Prevent text selection during swipes
+           
+        }} // Disable browser touch actions
         orthographic
         camera={{
           position: [0, 0, 10],
@@ -599,6 +726,11 @@ function App() {
           zoom: 200
         }}
       >
+
+        <TetrisLights />
+
+        <group scale={[scaleFactor, scaleFactor, 1]}>
+
         <Tetris />
         {shapes.map((shape, index) => (
           <ShapeMovement
@@ -609,9 +741,9 @@ function App() {
             onRotate={handleRotate}
           />
         ))}
-
-        <OrbitControls />
+        </group>        
       </Canvas>
+        </div>
     </>
   )
 }

@@ -12,8 +12,6 @@ const Tetris: React.FC = () => {
     // Use useThree hook inside the functional component
     const { size } = useThree();
     const isMobile = size.width < 768;	  
-
-    console.log("width:", size.width, size.height, isMobile);
     
     // Scale factor for mobile
     const scaleFactor = isMobile ? 0.5 : 1.0;

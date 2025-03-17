@@ -51,10 +51,6 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
   const endY = -2.75;
   const speed = 0.1;
 
-  // Touch tracking state
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const lastMoveTime = useRef<number>(0);
-  const MOVE_THROTTLE = 150; // ms between allowed moves
 
   // Handle keyboard controls
   useEffect(() => {
@@ -627,6 +623,7 @@ function App() {
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const scaleFactor = isMobile ? 0.7  : 1.0;
+ 
 
   useEffect(() => {
     // Focus the canvas when the component mounts
@@ -643,6 +640,117 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Use useRef for persisting values between renders
+  const touchClock = useRef(new THREE.Clock());
+  const touchState = useRef({
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    accumulatedDeltaX: 0,
+    isTracking: false,
+    lastMoveTime: 0,
+    activeShapeId: null
+  });
+  
+  const handleTouchStart = (event) => {
+    const touch = event.touches[0];
+    const activeShape = shapes.find(shape => !shape.hasLanded);
+    
+    // Initialize touch state
+    touchState.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      lastX: touch.clientX,
+      lastY: touch.clientY,
+      accumulatedDeltaX: 0,
+      isTracking: true,
+      lastMoveTime: Date.now(),
+      activeShapeId: activeShape?.id || null
+    };
+    
+    touchClock.current.start();
+  };
+  
+  const handleTouchMove = (event) => {
+    if (!touchState.current.isTracking || !touchState.current.activeShapeId) return;
+    
+    const touch = event.touches[0];
+    const currentTime = Date.now();
+    
+    // Calculate deltas from last position (not from start position)
+    const deltaX = touch.clientX - touchState.current.lastX;
+    const deltaY = touch.clientY - touchState.current.lastY;
+    
+    // Update last position
+    touchState.current.lastX = touch.clientX;
+    touchState.current.lastY = touch.clientY;
+    
+    // Accumulate horizontal movement
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      touchState.current.accumulatedDeltaX += deltaX;
+      
+      // Check if we've accumulated enough movement for a grid step (25px = one grid cell)
+      if (Math.abs(touchState.current.accumulatedDeltaX) >= 25 && 
+          (currentTime - touchState.current.lastMoveTime) > 200) { // 200ms throttle
+        
+        const activeShape = shapes.find(shape => shape.id === touchState.current.activeShapeId);
+        if (activeShape) {
+          const direction = touchState.current.accumulatedDeltaX > 0 ? 1 : -1;
+          // Move the shape
+          handleUpdatePosition(
+            activeShape.id,
+            direction > 0 
+              ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1)*0.25), activeShape.position.x + 0.25)
+              : Math.max(-1.25, activeShape.position.x - 0.25),
+            activeShape.position.y
+          );
+          
+          // Reset accumulated delta and update last move time
+          touchState.current.accumulatedDeltaX = 0;
+          touchState.current.lastMoveTime = currentTime;
+        }
+      }      
+    }
+  };
+  
+  const handleTouchEnd = (event) => {
+    // Perform one final move if we have significant accumulated delta
+    if (touchState.current.isTracking && 
+        touchState.current.activeShapeId && 
+        Math.abs(touchState.current.accumulatedDeltaX) >= 0) {
+      
+      const activeShape = shapes.find(shape => shape.id === touchState.current.activeShapeId);
+      if (activeShape) {
+        const direction = touchState.current.accumulatedDeltaX > 0 ? 1 : -1;
+
+        console.log("Direction: ", direction);
+        
+        handleUpdatePosition(
+          activeShape.id,
+          direction > 0 
+            ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1)*0.25), activeShape.position.x + 0.25)
+            : Math.max(-1.25, activeShape.position.x - 0.25),
+          activeShape.position.y
+        );
+      }
+    }
+    
+    // Reset touch state
+    touchState.current.isTracking = false;
+    touchState.current.accumulatedDeltaX = 0;
+    touchClock.current.stop();
+  };
+  
+  
+  // Add a double tap handler for rotation
+  const handleDoubleTap = (event) => {
+    const activeShape = shapes.find(shape => !shape.hasLanded);
+    if (activeShape) {
+      handleRotate();
+    }
+  };
+
 
   return (
     <>
@@ -652,9 +760,10 @@ function App() {
         tabIndex={0} // Make canvas focusable
         style={{ 
           outline: 'none', 
-          touchAction: 'none',           
+          touchAction: 'none', // Disable browser touch actions      
           width: '100%',
-          height: '100%'
+          height: '100%',
+          userSelect: 'none' // Prevent text selection during swipes
            
         }} // Disable browser touch actions
         orthographic
@@ -665,17 +774,28 @@ function App() {
           far: 1000,
           zoom: 200
         }}
+        onTouchStart={(e) => {
+          e.stopPropagation();
+          handleTouchStart(e);
+        }}
+        onTouchMove={(e) => {
+          e.stopPropagation();
+          handleTouchMove(e);
+        }}
+        onTouchEnd={(e) => {
+          e.stopPropagation();
+          handleTouchEnd(e);
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          handleDoubleTap(e);
+        }}
       >
 
         <TetrisLights />
 
         <group scale={[scaleFactor, scaleFactor, 1]}>
 
-        <SwipePlane 
-          shape={shapes.find(s => !s.hasLanded)} 
-          onUpdatePosition={handleUpdatePosition} 
-          onRotate={handleRotate} 
-        />
         <Tetris />
         {shapes.map((shape, index) => (
           <ShapeMovement
@@ -687,7 +807,6 @@ function App() {
           />
         ))}
         </group>        
-        <OrbitControls enableRotate={false} enablePan={false} />
       </Canvas>
     </>
   )

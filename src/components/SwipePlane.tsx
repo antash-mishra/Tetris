@@ -58,7 +58,7 @@ const SwipePlane = ({
         const MIN_TIME_BETWEEN_SWIPES = 0.25; // seconds
         
 
-        console.log("dist: ", movementDistance, velocity);
+        // console.log("dist: ", movementDistance, velocity);
         if (true) {
           // Determine primary direction based on which axis had the larger movement
           const absMovementX = Math.abs(mx);
@@ -74,11 +74,11 @@ const SwipePlane = ({
             swipeDirection = my > 0 ? 'down' : 'up';
           }
           
-          console.log("Swipe: ", swipeDirection, "Movement:", [mx, my], "Distance:", movementDistance);
+          // console.log("Swipe: ", swipeDirection, "Movement:", [mx, my], "Distance:", movementDistance);
           
           switch (swipeDirection) {
             case 'left':
-              console.log("Left");
+              // console.log("Left");
               onUpdatePosition(
                 shape.id,
                 Math.max(-1.25, shape.position.x - 0.25),
@@ -87,7 +87,7 @@ const SwipePlane = ({
               break;
                
             case 'right':
-              console.log("Right");
+              // console.log("Right");
               onUpdatePosition(
                 shape.id,
                 Math.min(1.0 - ((shape.shapeMaxWidth - 1) * 0.25), shape.position.x + 0.25),

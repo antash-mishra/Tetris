@@ -1,15 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { Canvas, events, useFrame, useThree } from '@react-three/fiber'
 import './App.css'
 import Tetris from './Tetris'
 import { Shape } from './components/Shape'
-import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { ShapeType } from './components/Shape'
 import { Figures } from './components/figures'
-import { useDrag, useGesture } from '@use-gesture/react';
-import SwipePlane from './components/SwipePlane'
 import TetrisLights from './components/TetrisLights'
+import { time } from 'three/tsl'
 
 type GridCell = {
   occupied: boolean,
@@ -35,6 +33,14 @@ type ShapeState = {
 const BOARD_HEIGHT = 5;
 const CELL_SIZE = 0.25;
 
+// Debounce function to limit how often a function can be called
+function debounce(func: Function, wait: number) {
+  let timeout: ReturnType<typeof setTimeout>;
+  return function(...args: any[]) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
 
 
 function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }: {
@@ -51,6 +57,7 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
   const endY = -2.75;
   const speed = 0.1;
 
+  const debouncedUpdatePosition = useCallback(debounce(onUpdatePosition, 50), [onUpdatePosition]);
 
   // Handle keyboard controls
   useEffect(() => {
@@ -58,20 +65,23 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
       if (shapeState.hasLanded) return;
       switch (event.key) {
         case 'ArrowLeft':
+          console.log("Arrow left")
           // Move left, but not beyond left boundary (-1.25)
-          onUpdatePosition(
+          debouncedUpdatePosition(
             shapeState.id,
             Math.max(-1.25, shapeState.position.x - 0.25),
             shapeState.position.y
           );
           break;
         case 'ArrowRight':
-          // Move right, but not beyond right boundary (0.50)
-          onUpdatePosition(
+          console.log("Arrow right:", shapeState.position.x, shapeState.id, shapeState.shapeMaxWidth)         // Move right, but not beyond right boundary (0.50)
+          debouncedUpdatePosition(
             shapeState.id,
             Math.min(1.0 - ((shapeState.shapeMaxWidth - 1)*0.25) , shapeState.position.x + 0.25),
             shapeState.position.y
           );
+
+          console.log("Arrow right 1:", shapeState.position.x, shapeState.id)
           break;
 
         case 'ArrowUp':
@@ -86,7 +96,7 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shapeState]);
+  }, [event]);
 
   useFrame((state, delta) => {
 
@@ -531,21 +541,14 @@ function App() {
 
   const handleUpdatePosition = (id: number, x: number, y: number) => {
 
-    const shape = shapes.find(shape => shape.id === id);
-    if (!shape || shape.hasLanded) return;
-    
-    if (isValidPosition(shape.type, x, y, shape.rotation)) {
+    setShapes(prevShapes => {
+      const shape = prevShapes.find(shape => shape.id === id);
 
-      if (shape.position.x != x) {
-        console.log(`Updating position: id=${id}, x=${shape.position.x}, y=${y}`);
-      }
-      
-      
-      // Force a more explicit state update
-      setShapes(prevShapes => {
-        const newShapes = prevShapes.map(shape => {
+      if (!shape || shape.hasLanded) return prevShapes;
+  
+      if (isValidPosition(shape.type, x, y, shape.rotation)) {
+        return prevShapes.map(shape => {
           if (shape.id === id) {
-            // console.log(`Found shape to update: ${shape.id}, current pos: ${shape.position.x}, ${shape.position.y}`);
             return {
               ...shape,
               position: {
@@ -557,10 +560,9 @@ function App() {
           }
           return shape;
         });
-
-        return newShapes;
-      });
-    }
+      }
+      return prevShapes;
+    });
   };
 
   const handleRotate = () => {
@@ -641,110 +643,50 @@ function App() {
   }, []);
 
   // Use useRef for persisting values between renders
-  const touchClock = useRef(new THREE.Clock());
-  const touchState = useRef({
-    startX: 0,
-    startY: 0,
-    lastX: 0,
-    lastY: 0,
-    accumulatedDeltaX: 0,
-    isTracking: false,
-    lastMoveTime: 0,
-    activeShapeId: null
-  });
-  
-  const handleTouchStart = (event) => {
-    const touch = event.touches[0];
-    const activeShape = shapes.find(shape => !shape.hasLanded);
-    
-    // Initialize touch state
-    touchState.current = {
-      startX: touch.clientX,
-      startY: touch.clientY,
-      lastX: touch.clientX,
-      lastY: touch.clientY,
-      accumulatedDeltaX: 0,
-      isTracking: true,
-      lastMoveTime: Date.now(),
-      activeShapeId: activeShape?.id || null
-    };
-    
-    touchClock.current.start();
-  };
-  
-  const handleTouchMove = (event) => {
-    if (!touchState.current.isTracking || !touchState.current.activeShapeId) return;
-    
-    const touch = event.touches[0];
-    const currentTime = Date.now();
-    
-    // Calculate deltas from last position (not from start position)
-    const deltaX = touch.clientX - touchState.current.lastX;
-    const deltaY = touch.clientY - touchState.current.lastY;
-    
-    // Update last position
-    touchState.current.lastX = touch.clientX;
-    touchState.current.lastY = touch.clientY;
-    
-    // Accumulate horizontal movement
-    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-      touchState.current.accumulatedDeltaX += deltaX;
-      
-      // Check if we've accumulated enough movement for a grid step (25px = one grid cell)
-      if (Math.abs(touchState.current.accumulatedDeltaX) >= 25 && 
-          (currentTime - touchState.current.lastMoveTime) > 200) { // 200ms throttle
-        
-        const activeShape = shapes.find(shape => shape.id === touchState.current.activeShapeId);
-        if (activeShape) {
-          const direction = touchState.current.accumulatedDeltaX > 0 ? 1 : -1;
-          // Move the shape
-          handleUpdatePosition(
-            activeShape.id,
-            direction > 0 
-              ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1)*0.25), activeShape.position.x + 0.25)
-              : Math.max(-1.25, activeShape.position.x - 0.25),
-            activeShape.position.y
-          );
-          
-          // Reset accumulated delta and update last move time
-          touchState.current.accumulatedDeltaX = 0;
-          touchState.current.lastMoveTime = currentTime;
-        }
-      }      
-    }
-  };
-  
-  const handleTouchEnd = (event) => {
-    // Perform one final move if we have significant accumulated delta
-    if (touchState.current.isTracking && 
-        touchState.current.activeShapeId && 
-        Math.abs(touchState.current.accumulatedDeltaX) >= 0) {
-      
-      const activeShape = shapes.find(shape => shape.id === touchState.current.activeShapeId);
-      if (activeShape) {
-        const direction = touchState.current.accumulatedDeltaX > 0 ? 1 : -1;
+  // const touchClock = useRef(new THREE.Clock());
+  // const touchState = useRef({
+  //   startX: 0,
+  //   startY: 0,
+  //   lastX: 0,
+  //   lastY: 0,
+  //   accumulatedDeltaX: 0,
+  //   isTracking: false,
+  //   lastMoveTime: 0,
+  //   activeShapeId: null
+  // });
 
-        console.log("Direction: ", direction);
-        
-        handleUpdatePosition(
-          activeShape.id,
-          direction > 0 
-            ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1)*0.25), activeShape.position.x + 0.25)
-            : Math.max(-1.25, activeShape.position.x - 0.25),
-          activeShape.position.y
-        );
-      }
-    }
-    
-    // Reset touch state
-    touchState.current.isTracking = false;
-    touchState.current.accumulatedDeltaX = 0;
-    touchClock.current.stop();
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
+
+  
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
   };
+  
+  const handleTouchMove = (e) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+  
+  const handleTouchEnd = useCallback(debounce(() => {
+    // Perform one final move if we have significant accumulated delta
+    const deltaX = touchEndX.current - touchStartX.current;
+    const activeShape = shapes.find(shape => !shape.hasLanded);
+  
+    if (Math.abs(deltaX) > 30 && activeShape) {
+      handleUpdatePosition(
+        activeShape.id,
+        deltaX > 0
+          ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1) * 0.25), activeShape.position.x + 0.25)
+          : Math.max(-1.25, activeShape.position.x - 0.25),
+        activeShape.position.y
+      );
+    }
+  }, 50), [shapes, handleUpdatePosition]);
+  
   
   
   // Add a double tap handler for rotation
-  const handleDoubleTap = (event) => {
+  const handleDoubleTap = () => {
     const activeShape = shapes.find(shape => !shape.hasLanded);
     if (activeShape) {
       handleRotate();
@@ -754,6 +696,15 @@ function App() {
 
   return (
     <>
+
+  <div
+        style={{ width: "100vw", height: "100vh", touchAction: "none" }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onDoubleClick={handleDoubleTap}
+      >
+
 
       <Canvas shadows
         ref={canvasRef}
@@ -774,22 +725,6 @@ function App() {
           far: 1000,
           zoom: 200
         }}
-        onTouchStart={(e) => {
-          e.stopPropagation();
-          handleTouchStart(e);
-        }}
-        onTouchMove={(e) => {
-          e.stopPropagation();
-          handleTouchMove(e);
-        }}
-        onTouchEnd={(e) => {
-          e.stopPropagation();
-          handleTouchEnd(e);
-        }}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          handleDoubleTap(e);
-        }}
       >
 
         <TetrisLights />
@@ -808,6 +743,7 @@ function App() {
         ))}
         </group>        
       </Canvas>
+        </div>
     </>
   )
 }

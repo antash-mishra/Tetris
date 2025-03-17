@@ -26,7 +26,7 @@ npm run dev
 
 This will launch the app locally, typically at `http://localhost:5173/` (depending on your Vite configuration).
 
-TODO (Phase 1): 
+## TODO (Phase 1): 
 1. Adding smoothness to shape movement
 2. Adding score system
 3. Adding game start page

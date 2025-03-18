@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, use } from 'react'
 import { Canvas, events, useFrame, useThree } from '@react-three/fiber'
 import './App.css'
 import Tetris from './Tetris'
@@ -43,11 +43,12 @@ function debounce(func: Function, wait: number) {
 }
 
 
-function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }: {
+function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, isGameOver }: {
   shapeState: ShapeState,
   onShapeLanded: (id: number) => void,
   onUpdatePosition: (id: number, x: number, y: number) => void,
-  onRotate: () => void
+  onRotate: () => void,
+  isGameOver: boolean
 }) {
 
   const [spring, api] = useSpring(() => ({
@@ -60,10 +61,12 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
   const hasLandedRef = useRef(false);
   const startY = 2.5;
   const endY = -2.75;
-  const speed = 0.1;
+  const speed = 1;
 
   // Handle keyboard controls
   useEffect(() => {
+    if (isGameOver) return; // Prevent further actions if game is over
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (shapeState.hasLanded) return;
       switch (event.key) {
@@ -113,7 +116,7 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
     window.addEventListener('keydown', handleKeyDown);
     api.start({ position: [shapeState.position.x, shapeState.position.y, shapeState.position.z] });
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [event,api]);
+  }, [event,api, isGameOver]);
 
   useFrame((state, delta) => {
 
@@ -156,6 +159,8 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
 function App() {
 
   const [shapes, setShapes] = useState<ShapeState[]>([]);
+  const [score, setScore] = useState<number>(0);
+  const [isGameOver, setIsGameOver] = useState<boolean>(false)
   const [nextId, setNextId] = useState(1);
   const [isInitialized, setIsInitialized] = useState(false);
   const shapeTypes: ShapeType[] = ['T', 'L', 'I', 'O', 'J'];
@@ -271,6 +276,11 @@ function App() {
     const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
     // console.log("Grid: ", gridX, gridY);
 
+    if (gridY >= 18) {
+      setIsGameOver(true);
+      return;
+    }
+
     // Calculate exact grid positions for the shape
     const shapeCells: { x: number; y: number }[] = [];
     for (let row = 0; row < shapeMatrix.length; row++) {
@@ -328,6 +338,8 @@ function App() {
 
   const handleCompletedRows = async (completedRows: number[]) => {
     if (completedRows.length === 0) return;
+
+    setScore(prevScore => prevScore + completedRows.length * 10)
   
     // Process rows from bottom to top
     for (const completedRow of completedRows.sort((a, b) => b - a)) {
@@ -654,9 +666,16 @@ function App() {
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
     };
-
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Score system
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setScore(prevScore => prevScore + 1);
+    }, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const touchStartX = useRef(0);
@@ -702,47 +721,64 @@ function App() {
 
   return (
     <>
-      <Canvas shadows
-        ref={canvasRef}
-        tabIndex={0} // Make canvas focusable
-        style={{ 
-          outline: 'none', 
-          touchAction: 'none', // Disable browser touch actions      
-          width: '100%',
-          height: '100%',
-          userSelect: 'none' // Prevent text selection during swipes
-           
-        }} // Disable browser touch actions
-        orthographic
-        camera={{
-          position: [0, 0, 10],
-          fov: 90,
-          near: 0,
-          far: 1000,
-          zoom: 200
-        }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onDoubleClick={handleDoubleTap}
-      >
+      <div style={{ position: 'absolute', top: 10, left: 10, color: 'white' }}>
+        Score: {score}
+      </div>
+      {isGameOver ? (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          color: 'red',
+          fontSize: '2em',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          padding: '20px',
+          borderRadius: '10px'
+        }}>
+          Game Over
+        </div>
+      ) : (
+        <Canvas shadows
+          ref={canvasRef}
+          tabIndex={0}
+          style={{ 
+            outline: 'none', 
+            touchAction: 'none',
+            width: '100%',
+            height: '100%',
+            userSelect: 'none'
+          }}
+          orthographic
+          camera={{
+            position: [0, 0, 10],
+            fov: 90,
+            near: 0,
+            far: 1000,
+            zoom: 200
+          }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onDoubleClick={handleDoubleTap}
+        >
+          <TetrisLights />
+          <group scale={[scaleFactor, scaleFactor, 1]}>
+            <Tetris />
+            {shapes.map((shape, index) => (
+              <ShapeMovement
+                key={shape.id + index}
+                shapeState={shape}
+                onShapeLanded={handleShapeLanded}
+                onUpdatePosition={handleUpdatePosition}
+                onRotate={handleRotate}
+                isGameOver={isGameOver}
+              />
+            ))}
+          </group>        
+        </Canvas>
+      )}
 
-        <TetrisLights />
-
-        <group scale={[scaleFactor, scaleFactor, 1]}>
-
-        <Tetris />
-        {shapes.map((shape, index) => (
-          <ShapeMovement
-            key={shape.id + index}
-            shapeState={shape}
-            onShapeLanded={handleShapeLanded}
-            onUpdatePosition={handleUpdatePosition}
-            onRotate={handleRotate}
-          />
-        ))}
-        </group>        
-      </Canvas>
     </>
   )
 }

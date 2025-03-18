@@ -7,7 +7,7 @@ import * as THREE from 'three'
 import { ShapeType } from './components/Shape'
 import { Figures } from './components/figures'
 import TetrisLights from './components/TetrisLights'
-import { time } from 'three/tsl'
+import { useSpring, animated } from '@react-spring/three'
 
 type GridCell = {
   occupied: boolean,
@@ -50,14 +50,17 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
   onRotate: () => void
 }) {
 
+  const [spring, api] = useSpring(() => ({
+    position: [shapeState.position.x, shapeState.position.y, shapeState.position.z],
+    config: { mass: 0.7, tension: 150, friction: 20 }
+  }));
+
   const shape = useRef<THREE.Group>(new THREE.Group());
   const startTime = useRef(new THREE.Clock()) // Each mesh gets its own clock
   const hasLandedRef = useRef(false);
   const startY = 2.5;
   const endY = -2.75;
   const speed = 0.1;
-
-  const debouncedUpdatePosition = useCallback(debounce(onUpdatePosition, 50), [onUpdatePosition]);
 
   // Handle keyboard controls
   useEffect(() => {
@@ -67,19 +70,32 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
         case 'ArrowLeft':
           console.log("Arrow left")
           // Move left, but not beyond left boundary (-1.25)
-          debouncedUpdatePosition(
-            shapeState.id,
-            Math.max(-1.25, shapeState.position.x - 0.25),
-            shapeState.position.y
-          );
+          const animateLeft = () => {
+            requestAnimationFrame(() => {
+              onUpdatePosition(
+                shapeState.id,
+                Math.max(-1.25, shapeState.position.x - 0.25),
+                shapeState.position.y
+              );
+            }
+            );
+          };
+          animateLeft();
           break;
+
         case 'ArrowRight':
           console.log("Arrow right:", shapeState.position.x, shapeState.id, shapeState.shapeMaxWidth)         // Move right, but not beyond right boundary (0.50)
-          debouncedUpdatePosition(
-            shapeState.id,
-            Math.min(1.0 - ((shapeState.shapeMaxWidth - 1)*0.25) , shapeState.position.x + 0.25),
-            shapeState.position.y
-          );
+          const animateRight = () => {
+            requestAnimationFrame(() => {
+              onUpdatePosition(
+                shapeState.id,
+                Math.min(1.0 - ((shapeState.shapeMaxWidth - 1)*0.25) , shapeState.position.x + 0.25),
+                shapeState.position.y
+              );
+            }
+            );
+          };
+          animateRight();
 
           console.log("Arrow right 1:", shapeState.position.x, shapeState.id)
           break;
@@ -95,8 +111,9 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
     };
 
     window.addEventListener('keydown', handleKeyDown);
+    api.start({ position: [shapeState.position.x, shapeState.position.y, shapeState.position.z] });
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [event]);
+  }, [event,api]);
 
   useFrame((state, delta) => {
 
@@ -124,14 +141,14 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate }
 
   return (
     <>
-      <group
+      <animated.group
         ref={shape}
-        position={[shapeState.position.x, shapeState.position.y, shapeState.position.z]}>
+        position={spring.position}>
         <Shape 
           shapeType={shapeState.type} 
           rotation={shapeState.rotation} 
           customMatrix={shapeState.customMatrix} />
-      </group>
+      </animated.group>
     </>
   );
 }
@@ -642,19 +659,6 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Use useRef for persisting values between renders
-  // const touchClock = useRef(new THREE.Clock());
-  // const touchState = useRef({
-  //   startX: 0,
-  //   startY: 0,
-  //   lastX: 0,
-  //   lastY: 0,
-  //   accumulatedDeltaX: 0,
-  //   isTracking: false,
-  //   lastMoveTime: 0,
-  //   activeShapeId: null
-  // });
-
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
 
@@ -667,21 +671,24 @@ function App() {
     touchEndX.current = e.touches[0].clientX;
   };
   
-  const handleTouchEnd = useCallback(debounce(() => {
-    // Perform one final move if we have significant accumulated delta
+  const handleTouchEnd = useCallback(() => {
     const deltaX = touchEndX.current - touchStartX.current;
     const activeShape = shapes.find(shape => !shape.hasLanded);
   
-    if (Math.abs(deltaX) > 30 && activeShape) {
-      handleUpdatePosition(
-        activeShape.id,
-        deltaX > 0
-          ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1) * 0.25), activeShape.position.x + 0.25)
-          : Math.max(-1.25, activeShape.position.x - 0.25),
-        activeShape.position.y
-      );
+    if (Math.abs(deltaX) > 10 && activeShape) {
+      const targetX = deltaX > 0
+        ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1) * 0.25), activeShape.position.x + 0.25)
+        : Math.max(-1.25, activeShape.position.x - 0.25);
+  
+      const animate = () => {
+        requestAnimationFrame(() => {
+          handleUpdatePosition(activeShape.id, targetX, activeShape.position.y);
+        });
+      };
+  
+      animate();
     }
-  }, 50), [shapes, handleUpdatePosition]);
+  }, [shapes, handleUpdatePosition]);
   
   
   
@@ -693,19 +700,8 @@ function App() {
     }
   };
 
-
   return (
     <>
-
-  <div
-        style={{ width: "100vw", height: "100vh", touchAction: "none" }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onDoubleClick={handleDoubleTap}
-      >
-
-
       <Canvas shadows
         ref={canvasRef}
         tabIndex={0} // Make canvas focusable
@@ -725,6 +721,10 @@ function App() {
           far: 1000,
           zoom: 200
         }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onDoubleClick={handleDoubleTap}
       >
 
         <TetrisLights />
@@ -743,7 +743,6 @@ function App() {
         ))}
         </group>        
       </Canvas>
-        </div>
     </>
   )
 }

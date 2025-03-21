@@ -43,25 +43,32 @@ function debounce(func: Function, wait: number) {
 }
 
 
-function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, isGameOver }: {
+function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, isGameOver, isValidPosition }: {
   shapeState: ShapeState,
   onShapeLanded: (id: number) => void,
   onUpdatePosition: (id: number, x: number, y: number) => void,
   onRotate: () => void,
-  isGameOver: boolean
+  isGameOver: boolean,
+  isValidPosition: (shapeType: ShapeType, x: number, y: number, rotation: number) => boolean
 }) {
 
   const [spring, api] = useSpring(() => ({
     position: [shapeState.position.x, shapeState.position.y, shapeState.position.z],
-    config: { mass: 0.7, tension: 150, friction: 20 }
+    config: { mass: 0.7, tension: 170, friction: 20 }
   }));
 
   const shape = useRef<THREE.Group>(new THREE.Group());
-  const startTime = useRef(new THREE.Clock()) // Each mesh gets its own clock
+  const startTime = useRef(new THREE.Clock()); // Use a single clock instance
   const hasLandedRef = useRef(false);
+  const lastPosition = useRef(shapeState.position.y);
   const startY = 2.5;
   const endY = -2.75;
-  const speed = 1;
+  
+  const normalSpeed = 0.5; // Normal falling speed
+  const fastSpeed = 1.5;   // Fast falling speed when down arrow is pressed
+
+  const [speed, setSpeed] = useState(normalSpeed);
+  
 
   // Handle keyboard controls
   useEffect(() => {
@@ -109,20 +116,30 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, 
 
         case 'ArrowDown':
           startTime.current.elapsedTime += 0.2;
-          break;
       }
     };
 
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowDown') {
+        setSpeed(normalSpeed); // Reset to normal speed when down arrow is released
+      }
+    };
+
+
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
     api.start({ position: [shapeState.position.x, shapeState.position.y, shapeState.position.z] });
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [event,api, isGameOver]);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [event, isGameOver]);
 
   useFrame((state, delta) => {
 
     if (!shape.current || shapeState.hasLanded) return;
     // console.log(state.clock.getElapsedTime());
-    console.log(shapeState.position.x)
     // console.log(shapeState.rotation)
     //const elapsedTime =   state.clock.getElapsedTime() - startTime.current;
     const elapsedTime = startTime.current.getElapsedTime()
@@ -130,15 +147,17 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, 
   
     // ShapeMatrix length addition
     const newY = (startY) - (elapsedTime * speed);
-
-    // console.log("NewY: ", newY)
+    const validPosition = isValidPosition(shapeState.type, shapeState.position.x, newY, shapeState.rotation)
+    
+    console.log("NewY: ", newY, shapeState.position.y, validPosition);
+    
     // Stop at bottom position
-    if (newY > endY) {
+    if (validPosition) {
       onUpdatePosition(shapeState.id, shapeState.position.x, newY);
     } else {
       hasLandedRef.current = true;
-      onUpdatePosition(shapeState.id, shapeState.position.x, endY);
-      onShapeLanded(shapeState.id); // Trigger new shape spawn
+      onUpdatePosition(shapeState.id, shapeState.position.x, newY);
+      onShapeLanded(shapeState.id);
     }
   });
 
@@ -150,7 +169,7 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, 
         <Shape 
           shapeType={shapeState.type} 
           rotation={shapeState.rotation} 
-          customMatrix={shapeState.customMatrix} />
+          customMatrix={shapeState.customMatrix} /> 
       </animated.group>
     </>
   );
@@ -161,6 +180,7 @@ function App() {
   const [shapes, setShapes] = useState<ShapeState[]>([]);
   const [score, setScore] = useState<number>(0);
   const [isGameOver, setIsGameOver] = useState<boolean>(false)
+  const [highScores, setHighScores] = useState<{name: string, score: number, rank: number}[]>([]);
   const [nextId, setNextId] = useState(1);
   const [isInitialized, setIsInitialized] = useState(false);
   const shapeTypes: ShapeType[] = ['T', 'L', 'I', 'O', 'J'];
@@ -266,6 +286,24 @@ function App() {
     return completedRows.sort((a, b) => b - a);
   };
 
+  // Function to fetch high scores
+  const fetchHighScores = () => {
+    fetch('http://192.168.1.9:8080/scores')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(data => {
+        setHighScores(data); // Assuming you have a state for high scores
+      })
+      .catch(error => {
+        console.error('Error fetching high scores:', error);
+      });
+  };
+  
+
   const handleShapeLanded = (id: number) => {
 
     const shape = shapes.find(shape => shape.id === id);
@@ -276,8 +314,26 @@ function App() {
     const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
     // console.log("Grid: ", gridX, gridY);
 
-    if (gridY >= 18) {
+    if ((gridY + shapeMatrix.length) >= 18) {
       setIsGameOver(true);
+
+      fetch('http://192.168.1.9:8080/scores', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: 'PlayerName', score }), // Replace 'PlayerName' with actual player name
+      })
+      .then(response => {
+        console.log("Status: ", response.status)
+      })
+      .then(data => {
+        // Optionally, fetch high scores after saving
+        fetchHighScores();
+      })
+      .catch(error => {
+        console.error('Error saving score:', error);
+      });  
       return;
     }
 
@@ -335,34 +391,39 @@ function App() {
     }  
   }, [shapes, grid])
     
-
   const handleCompletedRows = async (completedRows: number[]) => {
     if (completedRows.length === 0) return;
+  
+    // Update score once
+    setScore(prevScore => prevScore + completedRows.length * 10);
+  
+    try {
+      // Process rows from bottom to top
+      for (const completedRow of completedRows.sort((a, b) => b - a)) {
+        // Update shapes for this row
+        const updatedShapes = updateShapesForRow(completedRow, grid, shapes);
+        
+        // Update grid for this row
+        const updatedGrid = updateGridForRow(completedRow, grid, updatedShapes);
+    
+        // Move shapes down
+        const { shapes: movedShapes, grid: movedGrid } = moveShapesDown(
+          completedRow, 
+          updatedShapes, 
+          updatedGrid
+        );
+    
+        // Update state and wait for it to complete
+        await new Promise<void>(resolve => {
+          setShapes(movedShapes);
+          setGrid(movedGrid);
+          // Use setTimeout to ensure state updates are processed
+          setTimeout(resolve, 100); // Small delay between row updates
+        });
+      }
 
-    setScore(prevScore => prevScore + completedRows.length * 10)
-  
-    // Process rows from bottom to top
-    for (const completedRow of completedRows.sort((a, b) => b - a)) {
-      // Update shapes for this row
-      const updatedShapes = updateShapesForRow(completedRow, grid, shapes);
-      
-      // Update grid for this row
-      const updatedGrid = updateGridForRow(completedRow, grid, updatedShapes);
-  
-      // Move shapes down
-      const { shapes: movedShapes, grid: movedGrid } = moveShapesDown(
-        completedRow, 
-        updatedShapes, 
-        updatedGrid
-      );
-  
-      // Update state and wait for it to complete
-      await new Promise<void>(resolve => {
-        setShapes(movedShapes);
-        setGrid(movedGrid);
-        // Use setTimeout to ensure state updates are processed
-        setTimeout(resolve, 100); // Small delay between row updates
-      });
+    } catch (error) {
+      console.error("Error processing completed rows:", error);
     }
   };
 
@@ -572,10 +633,16 @@ function App() {
 
     setShapes(prevShapes => {
       const shape = prevShapes.find(shape => shape.id === id);
+      
+      console.log("Shape: ", shape, shape?.hasLanded);
 
       if (!shape || shape.hasLanded) return prevShapes;
-  
-      if (isValidPosition(shape.type, x, y, shape.rotation)) {
+      
+      const validPosition = isValidPosition(shape.type, x, y, shape.rotation)
+      console.log("Valid: ", validPosition)
+            
+      
+      if (validPosition) {
         return prevShapes.map(shape => {
           if (shape.id === id) {
             return {
@@ -673,10 +740,13 @@ function App() {
   // Score system
   useEffect(() => {
     const interval = setInterval(() => {
-      setScore(prevScore => prevScore + 1);
+      if (!isGameOver) {
+       
+        setScore(prevScore => prevScore + 1);
+      };
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isGameOver, score]);
 
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
@@ -725,20 +795,65 @@ function App() {
         Score: {score}
       </div>
       {isGameOver ? (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          color: 'red',
-          fontSize: '2em',
-          backgroundColor: 'rgba(0, 0, 0, 0.7)',
-          padding: '20px',
-          borderRadius: '10px'
-        }}>
-          Game Over
-        </div>
-      ) : (
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        color: 'white',
+        fontSize: '1.5em',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        padding: '20px',
+        borderRadius: '10px',
+        width: '80%',
+        maxWidth: '400px'
+      }}>
+        <h2 style={{ color: 'red', textAlign: 'center', marginTop: 0 }}>Game Over</h2>
+        <p style={{ textAlign: 'center' }}>Your Score: {score}</p>
+        
+        {highScores && highScores.length > 0 ? (
+          <div>
+            <h3 style={{ textAlign: 'center' }}>High Scores</h3>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #ddd' }}>Rank</th>
+                  <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>Name</th>
+                  <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #ddd' }}>Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {highScores.map((user, index) => (
+                  <tr key={index}>
+                    <td style={{ padding: '8px', textAlign: 'center' }}>{user.rank}</td>
+                    <td style={{ padding: '8px', textAlign: 'left' }}>{user.name}</td>
+                    <td style={{ padding: '8px', textAlign: 'right' }}>{user.score}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p style={{ textAlign: 'center' }}>Loading high scores...</p>
+        )}
+        
+        <button 
+          onClick={() => window.location.reload()} 
+          style={{
+            display: 'block',
+            margin: '20px auto 0',
+            padding: '10px 20px',
+            backgroundColor: '#4CAF50',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer'
+          }}
+        >
+          Play Again
+        </button>
+      </div>
+    ) : (
         <Canvas shadows
           ref={canvasRef}
           tabIndex={0}
@@ -773,6 +888,7 @@ function App() {
                 onUpdatePosition={handleUpdatePosition}
                 onRotate={handleRotate}
                 isGameOver={isGameOver}
+                isValidPosition={isValidPosition}
               />
             ))}
           </group>        

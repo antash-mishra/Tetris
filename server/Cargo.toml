@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 actix-web = "4.10.2"
+actix-cors = "0.6"
 r2d2 = "0.8"
 r2d2_sqlite = "0.22"
 rusqlite = "0.29"

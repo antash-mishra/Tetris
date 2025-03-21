@@ -1,8 +1,10 @@
 use actix_web::{post, web, App, HttpServer, Responder, HttpResponse};
+use actix_cors;
 use r2d2_sqlite::SqliteConnectionManager;
 use r2d2::Pool;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+
 
 #[derive(Serialize, Deserialize)]
 struct NewUser {
@@ -92,7 +94,15 @@ async fn main() -> std::io::Result<()> {
     ", []).expect("Failed to create table");
 
     HttpServer::new( move || {
+        // Configure CORS
+        let cors = actix_cors::Cors::default()
+            .allow_any_origin()
+            .allow_any_method()
+            .allow_any_header()
+            .max_age(3600);
+        
         App::new()
+            .wrap(cors)
             .app_data(web::Data::new(AppState { db_pool: pool.clone() }))
             .service(echo)
             .route("/scores", web::get().to(get_scores))

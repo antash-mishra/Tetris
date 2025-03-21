@@ -28,9 +28,10 @@ This will launch the app locally, typically at `http://localhost:5173/` (dependi
 
 ## TODO (Phase 1): 
 1. Adding smoothness to shape movement - Desktop smoothness added, Mobile TODO
-2. Adding score system 
+2. ~~Adding score system~~ 
 3. Adding game start page
 4. ~~Adding game over logic~~
-5. Adding game over page
-6. Showing high score
-
+5. ~~Adding game over page (TODO top scores in gameover page)~~
+6. ~~Showing high score~~
+7. ~~Backend to save score~~
+8. Error: Sometimes shapes doesn't cover whole grid and remains in air

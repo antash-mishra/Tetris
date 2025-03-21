@@ -139,7 +139,7 @@ function TetrisBlock({ x, y }: { x: number, y: number }) {
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
     >
-      <boxGeometry args={[0.23, 0.23, 0.05]} />
+      <boxGeometry args={[0.25, 0.25, 0.05]} />
       <animated.meshStandardMaterial 
         color="#FF8E00"
         emissive="#FF8E00"

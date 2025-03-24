@@ -83,11 +83,13 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
           console.log("Arrow left")
           // Move left, but not beyond left boundary (-1.25)
           const animateLeft = () => {
+            requestAnimationFrame(() => {
             onUpdatePosition(
               shapeState.id,
               Math.max(-1.25, shapeState.position.x - 0.25),
               shapeState.position.y
             );
+            });
           };
           animateLeft();
           break;
@@ -95,11 +97,13 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
         case 'ArrowRight':
           console.log("Arrow right:", shapeState.position.x, shapeState.id, shapeState.shapeMaxWidth)         // Move right, but not beyond right boundary (0.50)
           const animateRight = () => {
-            onUpdatePosition(
-              shapeState.id,
-              Math.min(1.0 - ((shapeState.shapeMaxWidth - 1)*0.25) , shapeState.position.x + 0.25),
-              shapeState.position.y
-            );
+            requestAnimationFrame(() => {
+              onUpdatePosition(
+                shapeState.id,
+                Math.min(1.0 - ((shapeState.shapeMaxWidth - 1)*0.25) , shapeState.position.x + 0.25),
+                shapeState.position.y
+              );
+            });
           };
           animateRight();
 

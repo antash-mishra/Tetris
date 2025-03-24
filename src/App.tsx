@@ -46,12 +46,11 @@ function debounce(func: Function, wait: number) {
 function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, isGameOver, isValidPosition }: {
   shapeState: ShapeState,
   onShapeLanded: (id: number) => void,
-  onUpdatePosition: (id: number, x: number, y: number) => void,
+  onUpdatePosition: (id: number, x: number, y: number, callback?: () => void) => void,
   onRotate: () => void,
   isGameOver: boolean,
   isValidPosition: (shapeType: ShapeType, x: number, y: number, rotation: number) => boolean
 }) {
-
   const [spring, api] = useSpring(() => ({
     position: [shapeState.position.x, shapeState.position.y, shapeState.position.z],
     config: { mass: 0.7, tension: 170, friction: 20 }
@@ -60,9 +59,12 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, 
   const shape = useRef<THREE.Group>(new THREE.Group());
   const startTime = useRef(new THREE.Clock()); // Use a single clock instance
   const hasLandedRef = useRef(false);
-  const lastPosition = useRef(shapeState.position.y);
+  const lastValidGridPosition = useRef(shapeState.position.y);
+  const crossedGridLine = useRef(false);
+
   const startY = 2.5;
   const endY = -2.75;
+  const gridSize = 0.25;
   
   const normalSpeed = 0.5; // Normal falling speed
   const fastSpeed = 1.5;   // Fast falling speed when down arrow is pressed
@@ -81,13 +83,10 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, 
           console.log("Arrow left")
           // Move left, but not beyond left boundary (-1.25)
           const animateLeft = () => {
-            requestAnimationFrame(() => {
-              onUpdatePosition(
-                shapeState.id,
-                Math.max(-1.25, shapeState.position.x - 0.25),
-                shapeState.position.y
-              );
-            }
+            onUpdatePosition(
+              shapeState.id,
+              Math.max(-1.25, shapeState.position.x - 0.25),
+              shapeState.position.y
             );
           };
           animateLeft();
@@ -96,13 +95,10 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, 
         case 'ArrowRight':
           console.log("Arrow right:", shapeState.position.x, shapeState.id, shapeState.shapeMaxWidth)         // Move right, but not beyond right boundary (0.50)
           const animateRight = () => {
-            requestAnimationFrame(() => {
-              onUpdatePosition(
-                shapeState.id,
-                Math.min(1.0 - ((shapeState.shapeMaxWidth - 1)*0.25) , shapeState.position.x + 0.25),
-                shapeState.position.y
-              );
-            }
+            onUpdatePosition(
+              shapeState.id,
+              Math.min(1.0 - ((shapeState.shapeMaxWidth - 1)*0.25) , shapeState.position.x + 0.25),
+              shapeState.position.y
             );
           };
           animateRight();
@@ -134,30 +130,56 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, 
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [event, isGameOver]);
+  }, [event]);
 
-  useFrame((state, delta) => {
+  useFrame(() => {
+    if (!shape.current || shapeState.hasLanded || hasLandedRef.current || isGameOver) return;
+    
+    // Calculate continuous position for smooth visual movement
+    const elapsedTime = startTime.current.getElapsedTime();
+    const continuousY = Number((startY - (elapsedTime * speed)).toFixed(2));
+    
+    // Get grid-aligned positions
+    const currentGridY = Math.floor(shapeState.position.y / gridSize) * gridSize;
+    const nextGridY = Math.floor(continuousY / gridSize) * gridSize;
+    
+    // Only check for collisions when crossing grid boundaries
+    if (nextGridY !== currentGridY) {
+      crossedGridLine.current = true;
+      
+      // Check if next grid position is valid
+      const nextPositionValid = isValidPosition(
+        shapeState.type, 
+        shapeState.position.x, 
+        nextGridY, 
+        shapeState.rotation
+      );
 
-    if (!shape.current || shapeState.hasLanded) return;
-    // console.log(state.clock.getElapsedTime());
-    // console.log(shapeState.rotation)
-    //const elapsedTime =   state.clock.getElapsedTime() - startTime.current;
-    const elapsedTime = startTime.current.getElapsedTime()
-    
-  
-    // ShapeMatrix length addition
-    const newY = (startY) - (elapsedTime * speed);
-    const validPosition = isValidPosition(shapeState.type, shapeState.position.x, newY, shapeState.rotation)
-    
-    console.log("NewY: ", newY, shapeState.position.y, validPosition);
-    
-    // Stop at bottom position
-    if (validPosition) {
-      onUpdatePosition(shapeState.id, shapeState.position.x, newY);
-    } else {
-      hasLandedRef.current = true;
-      onUpdatePosition(shapeState.id, shapeState.position.x, newY);
-      onShapeLanded(shapeState.id);
+      console.log("New Y: ", continuousY, currentGridY, nextGridY, nextPositionValid)
+      
+      if (nextPositionValid) {
+        // Update last valid position
+        lastValidGridPosition.current = nextGridY;
+        // Continue with continuous movement
+        onUpdatePosition(shapeState.id, shapeState.position.x, continuousY);
+      } else {
+        // Shape has landed at last valid position
+        hasLandedRef.current = true;
+        
+        // Update position first, then mark as landed
+        onUpdatePosition(
+          shapeState.id,
+          shapeState.position.x, 
+          lastValidGridPosition.current,
+          () => onShapeLanded(shapeState.id) // Call onShapeLanded only after position is updated
+        );
+        return;
+      }
+    } else if (crossedGridLine.current || Math.abs(continuousY - shapeState.position.y) > 0.02) {
+      // Apply continuous movement when needed
+      // The small threshold prevents unnecessary updates for tiny movements
+      onUpdatePosition(shapeState.id, shapeState.position.x, continuousY);
+      crossedGridLine.current = false;
     }
   });
 
@@ -312,7 +334,7 @@ function App() {
 
     const shapeMatrix = getShapeMatrix(shape.type, shape.rotation);
     const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
-    // console.log("Grid: ", gridX, gridY);
+    console.log("Grid: ", shape.position.x, shape.position.y, gridX, gridY);
 
     if ((gridY + shapeMatrix.length) >= 18) {
       setIsGameOver(true);
@@ -629,35 +651,31 @@ function App() {
     return { shapes: updatedShapes, grid: newGrid };
   };
 
-  const handleUpdatePosition = (id: number, x: number, y: number) => {
-
+  const handleUpdatePosition = (id: number, x: number, y: number, callback?: () => void) => {
     setShapes(prevShapes => {
       const shape = prevShapes.find(shape => shape.id === id);
       
-      console.log("Shape: ", shape, shape?.hasLanded);
-
       if (!shape || shape.hasLanded) return prevShapes;
       
-      const validPosition = isValidPosition(shape.type, x, y, shape.rotation)
-      console.log("Valid: ", validPosition)
-            
       
-      if (validPosition) {
-        return prevShapes.map(shape => {
-          if (shape.id === id) {
-            return {
-              ...shape,
-              position: {
-                ...shape.position,
-                x: x,
-                y: y
-              }
-            };
-          }
-          return shape;
-        });
-      }
-      return prevShapes;
+      const updatedShapes =  prevShapes.map(shape => {
+        if (shape.id === id) {
+          console.log("Y Position: ", y, id)
+          return {
+            ...shape,
+            position: {
+              ...shape.position,
+              x: x,
+              y: y
+            }
+          };
+        }
+        return shape;
+      });
+
+      // Call the callback after the state update
+      if (callback) setTimeout(callback, 0);
+      return updatedShapes;
     });
   };
 

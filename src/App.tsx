@@ -138,7 +138,9 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
           break;
 
         case 'ArrowUp':
-          onRotate();
+          requestAnimationFrame(() => {
+            onRotate();
+          });
           break;
 
         case 'ArrowDown':

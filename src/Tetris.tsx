@@ -1,5 +1,7 @@
-import React, { Component, useRef } from 'react'
+import React, { Component, useRef, useEffect } from 'react'
 import { useThree } from '@react-three/fiber';
+import * as THREE from 'three';
+
 
 
 const Tetris: React.FC = () => {
@@ -16,6 +18,26 @@ const Tetris: React.FC = () => {
     // Scale factor for mobile
     const scaleFactor = isMobile ? 0.5 : 1.0;
 
+	const gridRef = useRef<THREE.InstancedMesh>(null);
+    const dummy = new THREE.Object3D();
+
+	useEffect(() => {
+        if (!gridRef.current) return;
+        let index = 0;
+
+        for (let i = 0; i < num_row_points; i++) {
+            for (let j = 0; j < num_col_points; j++) {
+                const x = -(BOARD_WIDTH / 2) + (i + 1) * CELL_SIZE;
+                const y = -(BOARD_HEIGHT / 2) + (j + 1) * CELL_SIZE;
+
+                dummy.position.set(x, y, 0.1);
+                dummy.updateMatrix();
+                gridRef.current.setMatrixAt(index++, dummy.matrix);
+            }
+        }
+        gridRef.current.instanceMatrix.needsUpdate = true;
+    }, []);
+
     return (
         <>
 			<group>
@@ -26,23 +48,11 @@ const Tetris: React.FC = () => {
             	</mesh>
 
             	{/* Grid Points */}
-            	<group>
-            	    {Array.from({ length: num_row_points }, (_, i) =>
-            	        Array.from({ length: num_col_points }, (_, j) => (
-            	            <mesh
-            	                key={`${i}-${j}`}
-            	                position={[
-            	                    -(BOARD_WIDTH / 2) + (i + 1) * CELL_SIZE, // Row lines
-            	                    -(BOARD_HEIGHT / 2) + (j + 1) * CELL_SIZE, // Column lines
-            	                    0.1
-            	                ]}
-            	            >
-            	                <sphereGeometry args={[0.015]} />
-            	                <meshBasicMaterial color="black" opacity={0.5} />
-            	            </mesh>
-            	        ))
-            	    )}
-            	</group>
+				<instancedMesh ref={gridRef} args={[null, null, num_row_points * num_col_points]}>
+				<octahedronGeometry args={[0.015, 0]} /> {/* Only 8 triangles per point */}
+				<meshBasicMaterial color="black" opacity={0.5} />
+            	</instancedMesh>
+
 			</group>
         </>
     );

@@ -139,7 +139,7 @@ function TetrisBlock({ x, y }: { x: number, y: number }) {
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
     >
-      <boxGeometry args={[0.25, 0.25, 0.05]} />
+      <boxGeometry args={[0.25, 0.25, 0.05, 1, 1, 1]} />
       <animated.meshStandardMaterial 
         color="#FF8E00"
         emissive="#FF8E00"
@@ -149,8 +149,8 @@ function TetrisBlock({ x, y }: { x: number, y: number }) {
       />
       
       {/* Top beveled edge for 3D effect */}
-      <mesh position={[0, 0, 0.03]} rotation={[0, 0, 0]}>
-        <ringGeometry args={[0.09, 0.115, 4]} />
+      <mesh position={[0, 0, 0.026]} rotation={[0, 0, 0]}>
+        <planeGeometry args={[0.22, 0.22]} />
         <meshBasicMaterial 
           color="#FFB04D" 
           transparent={true} 

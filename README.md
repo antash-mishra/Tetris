@@ -34,4 +34,4 @@ This will launch the app locally, typically at `http://localhost:5173/` (dependi
 5. ~~Adding game over page (TODO top scores in gameover page)~~
 6. ~~Showing high score~~
 7. ~~Backend to save score~~
-8. Error: Sometimes shapes doesn't cover whole grid and remains in air
+8. ~~Error: Sometimes shapes doesn't cover whole grid and remains in air~~

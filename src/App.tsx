@@ -43,10 +43,10 @@ function debounce(func: Function, wait: number) {
 }
 
 
-function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, isGameOver, isValidPosition }: {
+function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRotate, isGameOver, isValidPosition }: {
   shapeState: ShapeState,
-  onShapeLanded: (id: number) => void,
-  onUpdatePosition: (id: number, x: number, y: number, callback?: () => void) => void,
+  onUpdatePosition: (id: number, x: number, y: number) => void,
+  updateAndLandShape: (id: number, x: number, y: number) => void,
   onRotate: () => void,
   isGameOver: boolean,
   isValidPosition: (shapeType: ShapeType, x: number, y: number, rotation: number) => boolean
@@ -155,7 +155,7 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, 
         shapeState.rotation
       );
 
-      console.log("New Y: ", continuousY, currentGridY, nextGridY, nextPositionValid)
+      console.log("New Y: ", continuousY, currentGridY, nextGridY, nextPositionValid, lastValidGridPosition.current)
       
       if (nextPositionValid) {
         // Update last valid position
@@ -167,15 +167,18 @@ function ShapeMovement({ shapeState, onShapeLanded, onUpdatePosition, onRotate, 
         hasLandedRef.current = true;
         
         // Update position first, then mark as landed
-        onUpdatePosition(
+        updateAndLandShape(
           shapeState.id,
           shapeState.position.x, 
-          lastValidGridPosition.current,
-          () => onShapeLanded(shapeState.id) // Call onShapeLanded only after position is updated
+          lastValidGridPosition.current
         );
         return;
       }
-    } else if (crossedGridLine.current || Math.abs(continuousY - shapeState.position.y) > 0.02) {
+    } 
+    
+    else if (crossedGridLine.current || Math.abs(continuousY - shapeState.position.y) > 0.02) {
+      console.log("New Y 2: ", continuousY, currentGridY, nextGridY)
+
       // Apply continuous movement when needed
       // The small threshold prevents unnecessary updates for tiny movements
       onUpdatePosition(shapeState.id, shapeState.position.x, continuousY);
@@ -324,18 +327,20 @@ function App() {
         console.error('Error fetching high scores:', error);
       });
   };
-  
 
-  const handleShapeLanded = (id: number) => {
+  // Add this function to the App component
+  const updateAndLandShape = (id: number, x: number, y: number) => {
+    console.log("Updating and landing shape:", id, "Position:", x, y);
 
+    // First, find the shape
     const shape = shapes.find(shape => shape.id === id);
     if (!shape) return;
 
-
+    // Get the shape matrix
     const shapeMatrix = getShapeMatrix(shape.type, shape.rotation);
-    const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
-    console.log("Grid: ", shape.position.x, shape.position.y, gridX, gridY);
+    const [gridX, gridY] = worldToGrid(x, y);
 
+    // Check for game over condition
     if ((gridY + shapeMatrix.length) >= 18) {
       setIsGameOver(true);
 
@@ -344,13 +349,12 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: 'PlayerName', score }), // Replace 'PlayerName' with actual player name
+        body: JSON.stringify({ name: 'PlayerName', score }),
       })
       .then(response => {
-        console.log("Status: ", response.status)
+        console.log("Status: ", response.status);
       })
       .then(data => {
-        // Optionally, fetch high scores after saving
         fetchHighScores();
       })
       .catch(error => {
@@ -373,25 +377,26 @@ function App() {
       }
     }
 
-    // Create landed shape with cells data
-    const landedShape = { 
-      ...shape, 
-      hasLanded: true,
-      cells: shapeCells 
-    };
-    
-    // First update the landed state of the current shape
-    const updatedShapes = shapes.map(s =>
-      s.id === id ? landedShape : s
-    );
-
-
-    // Adding landed shape to grid
+    // Update the grid with the new shape
     const updatedGrid = addShapeToGrid(grid, shape, shapeMatrix, gridX, gridY);
     setGrid(updatedGrid);
-    setShapes(updatedShapes);
-    
-  }
+
+    // Update the shape with new position, cells, and landed state
+    setShapes(prevShapes => 
+      prevShapes.map(s => {
+        if (s.id === id) {
+          return {
+            ...s,
+            position: { ...s.position, x, y },
+            hasLanded: true,
+            cells: shapeCells
+          };
+        }
+        return s;
+      })
+    );
+  };
+  
 
   useEffect (() => {
     if (shapes.some(shape => shape.hasLanded)) {
@@ -652,15 +657,15 @@ function App() {
   };
 
   const handleUpdatePosition = (id: number, x: number, y: number, callback?: () => void) => {
+    // Keep track of the target position
+
     setShapes(prevShapes => {
       const shape = prevShapes.find(shape => shape.id === id);
       
       if (!shape || shape.hasLanded) return prevShapes;
-      
-      
-      const updatedShapes =  prevShapes.map(shape => {
+            
+      const updatedShapes = prevShapes.map(shape => {
         if (shape.id === id) {
-          console.log("Y Position: ", y, id)
           return {
             ...shape,
             position: {
@@ -671,10 +676,7 @@ function App() {
           };
         }
         return shape;
-      });
-
-      // Call the callback after the state update
-      if (callback) setTimeout(callback, 0);
+      });      
       return updatedShapes;
     });
   };
@@ -902,8 +904,8 @@ function App() {
               <ShapeMovement
                 key={shape.id + index}
                 shapeState={shape}
-                onShapeLanded={handleShapeLanded}
                 onUpdatePosition={handleUpdatePosition}
+                updateAndLandShape={updateAndLandShape}
                 onRotate={handleRotate}
                 isGameOver={isGameOver}
                 isValidPosition={isValidPosition}

@@ -8,6 +8,7 @@ import { ShapeType } from './components/Shape'
 import { Figures } from './components/figures'
 import TetrisLights from './components/TetrisLights'
 import { useSpring, animated } from '@react-spring/three'
+import { Perf } from 'r3f-perf'
 
 type GridCell = {
   occupied: boolean,
@@ -81,26 +82,52 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
       switch (event.key) {
         case 'ArrowLeft':
           console.log("Arrow left")
+          
           // Move left, but not beyond left boundary (-1.25)
           const animateLeft = () => {
+            
+            const xPosition = Math.max(-1.25, shapeState.position.x - 0.25)
+          
+            const validPosition = isValidPosition(
+              shapeState.type, 
+              xPosition, 
+              shapeState.position.y, 
+              shapeState.rotation
+            );
+
+            if (!validPosition) return;
+
             requestAnimationFrame(() => {
             onUpdatePosition(
               shapeState.id,
-              Math.max(-1.25, shapeState.position.x - 0.25),
+              xPosition,
               shapeState.position.y
             );
             });
           };
+          
           animateLeft();
           break;
 
         case 'ArrowRight':
           console.log("Arrow right:", shapeState.position.x, shapeState.id, shapeState.shapeMaxWidth)         // Move right, but not beyond right boundary (0.50)
+ 
           const animateRight = () => {
+            
+            const xPosition = Math.min(1.0 - ((shapeState.shapeMaxWidth - 1)*0.25) , shapeState.position.x + 0.25);
+            const validPosition = isValidPosition(
+              shapeState.type, 
+              xPosition, 
+              shapeState.position.y, 
+              shapeState.rotation
+            );
+            
+            if (!validPosition) return;
+
             requestAnimationFrame(() => {
               onUpdatePosition(
                 shapeState.id,
-                Math.min(1.0 - ((shapeState.shapeMaxWidth - 1)*0.25) , shapeState.position.x + 0.25),
+                xPosition,
                 shapeState.position.y
               );
             });
@@ -158,8 +185,6 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
         nextGridY, 
         shapeState.rotation
       );
-
-      console.log("New Y: ", continuousY, currentGridY, nextGridY, nextPositionValid, lastValidGridPosition.current)
       
       if (nextPositionValid) {
         // Update last valid position
@@ -181,7 +206,6 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
     } 
     
     else if (crossedGridLine.current || Math.abs(continuousY - shapeState.position.y) > 0.02) {
-      console.log("New Y 2: ", continuousY, currentGridY, nextGridY)
 
       // Apply continuous movement when needed
       // The small threshold prevents unnecessary updates for tiny movements
@@ -284,6 +308,7 @@ function App() {
 
   const spawnNewShape = () => {
     const randomType = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
+    console.log("NewShape: ", randomType, nextId);
     const newShape: ShapeState = {
       id: nextId,
       type: randomType,
@@ -297,7 +322,8 @@ function App() {
 
     setShapes(prev => [...prev, newShape]);
     setNextId(prev => prev + 1);
-  };
+    
+};
 
   // Function to check for completed rows in the grid
   const checkCompletedRows = (currentGrid: GridCell[][]): number[] => {
@@ -334,7 +360,6 @@ function App() {
 
   // Add this function to the App component
   const updateAndLandShape = (id: number, x: number, y: number) => {
-    console.log("Updating and landing shape:", id, "Position:", x, y);
 
     // First, find the shape
     const shape = shapes.find(shape => shape.id === id);
@@ -402,25 +427,41 @@ function App() {
   };
   
 
-  useEffect (() => {
-    if (shapes.some(shape => shape.hasLanded)) {
-      const completedRows = checkCompletedRows(grid);
-      if (completedRows.length > 0) {
-        handleCompletedRows(completedRows);
-      } else {
-        // Only spawn a new shape if we don't already have an active (non-landed) shape
-        const hasActiveShape = shapes.some(shape => !shape.hasLanded);
+  const processingRowsRef = useRef(false);
+
+  useEffect(() => {
+    const handleLandedShape = async () => {
+      // If we're already processing, don't start another process
+      if (processingRowsRef.current) return;
+      
+      // Set processing flag immediately to block any other executions
+      processingRowsRef.current = true;
+      
+      try {
+        const completedRows = checkCompletedRows(grid);
         
-        // Add some delay before spawning new shape
-        if (!hasActiveShape ) {
-          setTimeout(() => {
-            spawnNewShape();
-          }, 500);
-          return; // Exit early to avoid double spawn
+        if (completedRows.length > 0) {
+          // Process all completed rows
+          await handleCompletedRows(completedRows);
         }
-      } 
-    }  
-  }, [shapes, grid])
+        
+        // After any processing (rows or not), check if we need to spawn
+        const hasActiveShape = shapes.some(shape => !shape.hasLanded);
+        if (!hasActiveShape) {
+          console.log("Spawning new shape");
+          spawnNewShape();
+        }
+      } finally {
+        // Clear processing flag when everything is done
+        processingRowsRef.current = false;
+      }
+    };
+  
+    // Only run this effect if there's a landed shape
+    if (shapes.some(shape => shape.hasLanded)) {
+      handleLandedShape(); 
+    }
+  }, [shapes, grid]); // Include grid in dependencies to catch completed rows
     
   const handleCompletedRows = async (completedRows: number[]) => {
     if (completedRows.length === 0) return;
@@ -901,6 +942,7 @@ function App() {
           onTouchEnd={handleTouchEnd}
           onDoubleClick={handleDoubleTap}
         >
+          <Perf position="top-left" />
           <TetrisLights />
           <group scale={[scaleFactor, scaleFactor, 1]}>
             <Tetris />

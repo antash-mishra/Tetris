@@ -21,7 +21,7 @@ const Tetris: React.FC = () => {
 			<group>
             	{/* Background Board */}
             	<mesh position={[0, 0, 0]}>
-            	    <planeGeometry args={[BOARD_WIDTH, BOARD_HEIGHT, 64, 64]} />
+            	    <planeGeometry args={[BOARD_WIDTH, BOARD_HEIGHT]} />
             	    <meshBasicMaterial color="black" opacity={0.5} transparent />
             	</mesh>
 
@@ -37,7 +37,7 @@ const Tetris: React.FC = () => {
             	                    0.1
             	                ]}
             	            >
-            	                <sphereGeometry args={[0.015, 32, 32]} />
+            	                <sphereGeometry args={[0.015]} />
             	                <meshBasicMaterial color="black" opacity={0.5} />
             	            </mesh>
             	        ))

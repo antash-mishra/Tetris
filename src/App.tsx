@@ -7,14 +7,19 @@ import * as THREE from 'three'
 import { ShapeType } from './components/Shape'
 import { Figures } from './components/figures'
 import TetrisLights from './components/TetrisLights'
-import { useSpring, animated } from '@react-spring/three'
+import { useSpring, animated, to } from '@react-spring/three'
 import { Perf } from 'r3f-perf'
-import EnvironmentMap from './components/Environment'
+import { Html } from "@react-three/drei"; // Import Html component
+
 
 type GridCell = {
   occupied: boolean,
   shapeId: number | null
 }
+
+type GameState = 'start' | 'playing' |  'paused' | 'gameOver'
+
+
 
 type ShapeState = {
   id: number,
@@ -45,13 +50,14 @@ function debounce(func: Function, wait: number) {
 }
 
 
-function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRotate, isGameOver, isValidPosition }: {
+function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRotate, isGameOver, isValidPosition,  gameState }: {
   shapeState: ShapeState,
   onUpdatePosition: (id: number, x: number, y: number) => void,
   updateAndLandShape: (id: number, x: number, y: number) => void,
   onRotate: () => void,
   isGameOver: boolean,
-  isValidPosition: (shapeType: ShapeType, x: number, y: number, rotation: number) => boolean
+  isValidPosition: (shapeType: ShapeType, x: number, y: number, rotation: number) => boolean,
+  gameState: GameState
 }) {
   const [spring, api] = useSpring(() => ({
     position: [shapeState.position.x, shapeState.position.y, shapeState.position.z],
@@ -73,10 +79,10 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
 
   const [speed, setSpeed] = useState(normalSpeed);
   
-
+  console.log("GameState: ", gameState);
   // Handle keyboard controls
   useEffect(() => {
-    if (isGameOver) return; // Prevent further actions if game is over
+    if (isGameOver || gameState === 'paused') return; // Prevent further actions if game is over
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (shapeState.hasLanded) return;
@@ -166,12 +172,34 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
     };
   }, [event]);
 
+
+  const pausedTime = useRef(0); // Total accumulated pause duration
+  const lastPauseTime = useRef(0); // Timestamp when pause started
+  const isPaused = useRef(false); // Track pause state to detect transitions
+  
+
   useFrame(() => {
     if (!shape.current || shapeState.hasLanded || hasLandedRef.current || isGameOver) return;
     
-    // Calculate continuous position for smooth visual movement
-    const elapsedTime = startTime.current.getElapsedTime();
+    if (gameState === 'paused' && !isPaused.current) {
+      // Just entered pause state
+      lastPauseTime.current = startTime.current.getElapsedTime();
+      isPaused.current = true;
+    } else if (gameState !== 'paused' && isPaused.current) {
+      // Just resumed from pause state
+      pausedTime.current += (startTime.current.getElapsedTime() - lastPauseTime.current);
+      isPaused.current = false;
+    }
+    
+    // Calculate effective elapsed time (total time minus paused time)
+    const elapsedTime = gameState === 'paused' 
+      ? lastPauseTime.current - pausedTime.current  // Use last position while paused
+      : startTime.current.getElapsedTime() - pausedTime.current;  // Normal play time minus pauses
+  
+    console.log("Elapsed: ", elapsedTime)
+    
     const continuousY = Number((startY - (elapsedTime * speed)).toFixed(2));
+    
     
     // Get grid-aligned positions
     const currentGridY = Math.floor(shapeState.position.y / gridSize) * gridSize;
@@ -233,6 +261,7 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
 
 function App() {
 
+  const [gameState, setGameState] = useState<GameState>('start');
   const [shapes, setShapes] = useState<ShapeState[]>([]);
   const [score, setScore] = useState<number>(0);
   const [isGameOver, setIsGameOver] = useState<boolean>(false)
@@ -241,9 +270,76 @@ function App() {
   const [isInitialized, setIsInitialized] = useState(false);
   const shapeTypes: ShapeType[] = ['T', 'L', 'I', 'O', 'J'];
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
   // Crate Grid to track occupied cells (20 rows, 10 columns)
   const [grid, setGrid] = useState<GridCell[][]>(Array.from({ length: 20 }, () => Array(10).fill({ occupied: false, shapeId: null })));
+  
+  // When game is over
+  useEffect(() => {
+    if (isGameOver) {
+      setGameState('gameOver');
+    }
+  }, [isGameOver]);
+
+  // Handle page visibility changes to pause/resume the game
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && gameState === 'playing') {
+        // Page is hidden, pause the game
+        setGameState('paused');
+      }
+    };
+
+    // Add event listener for visibility change
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Clean up event listener
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [gameState]);
+
+
+  // Function to start the game
+  const startGame = () => {
+    resetGame();
+    setGameState('playing');
+    fetchHighScores(); // Load high scores
+  };
+  
+  // Function to reset the game
+  const resetGame = () => {
+    setScore(0);
+    setGrid(Array.from({ length: 20 }, () => Array(10).fill({ occupied: false, shapeId: null })));
+    setShapes([]);
+    setIsGameOver(false);
+    setIsInitialized(false); // Reset initialization so first shape will be created
+    setNextId(1);
+  };
+  
+  // Function to resume the game
+  const resumeGame = () => {
+    setGameState('playing');
+  };
+
+  useEffect(() => {
+    const enterFullScreen = () => {
+      const element = document.documentElement; // Fullscreen the whole page
+      if (element.requestFullscreen) {
+        element.requestFullscreen();
+      } else if (element.mozRequestFullScreen) { // Firefox
+        element.mozRequestFullScreen();
+      } else if (element.webkitRequestFullscreen) { // Chrome, Safari, Edge
+        element.webkitRequestFullscreen();
+      } else if (element.msRequestFullscreen) { // IE
+        element.msRequestFullscreen();
+      }
+      document.removeEventListener("click", enterFullScreen); // Remove listener after activation
+    };
+
+    document.addEventListener("click", enterFullScreen);
+    return () => document.removeEventListener("click", enterFullScreen);
+  }, []);
+
 
   // Covert world coordinates to grid coordinates
   const worldToGrid = (x: number, y: number) => {
@@ -310,6 +406,8 @@ function App() {
 
 
   const spawnNewShape = () => {
+    if (gameState === 'paused') return;
+
     const randomType = shapeTypes[Math.floor(Math.random() * shapeTypes.length)];
     console.log("NewShape: ", randomType, nextId);
     const newShape: ShapeState = {
@@ -363,6 +461,8 @@ function App() {
 
   // Add this function to the App component
   const updateAndLandShape = (id: number, x: number, y: number) => {
+    if (gameState === 'paused') return;
+
 
     // First, find the shape
     const shape = shapes.find(shape => shape.id === id);
@@ -434,6 +534,7 @@ function App() {
 
   useEffect(() => {
     const handleLandedShape = async () => {
+      if (gameState === 'paused') return;
       // If we're already processing, don't start another process
       if (processingRowsRef.current) return;
       
@@ -510,6 +611,7 @@ function App() {
     gridX: number, 
     gridY: number
   ): GridCell[][] => {
+
 
     const newGrid = [...currentGrid.map(row => [...row])];
     
@@ -637,6 +739,7 @@ function App() {
     shapes: ShapeState[],
     currentGrid: GridCell[][]
   ): { shapes: ShapeState[], grid: GridCell[][] } => {
+
     const newGrid = [...currentGrid.map(row => [...row])];
     
     // First clear all cells above the completed row
@@ -706,6 +809,7 @@ function App() {
 
   const handleUpdatePosition = (id: number, x: number, y: number, callback?: () => void) => {
     // Keep track of the target position
+    if (gameState === 'paused') return;
 
     setShapes(prevShapes => {
       const shape = prevShapes.find(shape => shape.id === id);
@@ -731,6 +835,8 @@ function App() {
 
   const handleRotate = () => {
     // Rotate only the active (non-landed) shape
+    if (gameState === 'paused') return;
+
     setShapes(prev => prev.map(shape => {
       if (!shape.hasLanded) {
         
@@ -808,32 +914,52 @@ function App() {
   // Score system
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!isGameOver) {
+      if (!isGameOver  && gameState === 'playing') {
        
         setScore(prevScore => prevScore + 1);
       };
     }, 1000);
     return () => clearInterval(interval);
-  }, [isGameOver, score]);
+  }, [isGameOver, score, gameState]);
 
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
 
+  const touchStartY = useRef(0);
+  const touchEndY = useRef(0);
   
   const handleTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
   };
   
   const handleTouchMove = (e) => {
     touchEndX.current = e.touches[0].clientX;
+    touchEndY.current = e.touches[0].clientY;
   };
   
   const handleTouchEnd = useCallback(() => {
+    if (gameState === 'paused') return;
+
     const deltaX = touchEndX.current - touchStartX.current;
+    const deltaY = touchEndY.current - touchStartY.current;
+  
     const activeShape = shapes.find(shape => !shape.hasLanded);
+
+    // Check if this is primarily a vertical swipe
+    // if (Math.abs(deltaY) > 50 && Math.abs(deltaY) > Math.abs(deltaX) && activeShape) {
+    //   // Vertical swipe (threshold of 50px)
+    //   if (deltaY > 0) {
+    //     // Swipe up - rotate
+    //     handleRotate();
+    //   }
+    //   // We could add swipe down functionality here if needed
+    //   return;
+    // }
+
   
     if (Math.abs(deltaX) > 10 && activeShape) {
-      const targetX = deltaX > 0
+      const targetX = deltaX > 10
         ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1) * 0.25), activeShape.position.x + 0.25)
         : Math.max(-1.25, activeShape.position.x - 0.25);
   
@@ -845,21 +971,305 @@ function App() {
   
       animate();
     }
-  }, [shapes, handleUpdatePosition]);
+  }, [shapes, handleUpdatePosition, handleRotate, gameState]);
   
   
   
   // Add a double tap handler for rotation
   const handleDoubleTap = () => {
     const activeShape = shapes.find(shape => !shape.hasLanded);
-    if (activeShape) {
+    if (activeShape  && gameState === 'playing') {
       handleRotate();
     }
   };
 
+
   return (
     <>
-      {isGameOver ? (
+      { gameState === 'start' ? (
+      // Start Page
+      <div style={{
+        width: '100vw',
+        height: '100vh',
+        background: 'linear-gradient(135deg, #121212 0%, #2a2a2a 100%)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        color: 'white',
+        fontFamily: 'PixelOperator, sans-serif'
+      }}>
+        <div style={{
+          maxWidth: '600px',
+          width: '90%',
+          background: 'rgba(0,0,0,0.5)',
+          borderRadius: '10px',
+          padding: '30px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+        }}>
+          <h1 style={{ 
+            fontSize: 'min(10vw, 50px)', 
+            textAlign: 'center',
+            margin: '0 0 30px 0',
+            color: '#FFD700',
+            textShadow: '0 0 10px rgba(255,215,0,0.7)'
+          }}>
+            3D TETRIS
+          </h1>
+          
+          {highScores && highScores.length > 0 ? (
+            <div style={{ marginBottom: '30px' }}>
+              <h2 style={{ textAlign: 'center', fontSize: 'min(6vw, 30px)' }}>High Scores</h2>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid #444' }}>Rank</th>
+                    <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #444' }}>Name</th>
+                    <th style={{ padding: '8px', textAlign: 'right', borderBottom: '1px solid #444' }}>Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {highScores.slice(0, 5).map((user, index) => (
+                    <tr key={index}>
+                      <td style={{ padding: '8px', textAlign: 'center' }}>{user.rank}</td>
+                      <td style={{ padding: '8px', textAlign: 'left' }}>{user.name}</td>
+                      <td style={{ padding: '8px', textAlign: 'right' }}>{user.score}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p style={{ textAlign: 'center' }}>Loading high scores...</p>
+          )}
+          
+          <button 
+            onClick={startGame}
+            style={{
+              display: 'block',
+              width: '200px',
+              margin: '0 auto',
+              padding: '15px 20px',
+              fontSize: 'min(5vw, 24px)',
+              backgroundColor: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            PLAY NOW
+          </button>
+          
+          <div style={{ marginTop: '30px', textAlign: 'center', fontSize: 'min(3vw, 16px)' }}>
+            <p>Controls:</p>
+            <p>Desktop: Arrow keys to move, Space to rotate</p>
+            <p>Mobile: Swipe to move, Single tap to rotate</p>
+          </div>
+        </div>
+        
+        {/* Animated tetris blocks in background */}
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: -1, overflow: 'hidden' }}>
+          {Array.from({ length: 15 }).map((_, i) => (
+            <div key={i} style={{
+              position: 'absolute',
+              width: Math.random() * 40 + 20 + 'px',
+              height: Math.random() * 40 + 20 + 'px',
+              backgroundColor: `hsl(${Math.floor(Math.random() * 360)}, 80%, 50%)`,
+              opacity: 0.2,
+              top: Math.random() * 100 + '%',
+              left: Math.random() * 100 + '%',
+              animation: `float ${Math.random() * 10 + 15}s linear infinite`,
+              animationDelay: `-${Math.random() * 15}s`,
+              transform: `rotate(${Math.floor(Math.random() * 360)}deg)`
+            }}></div>
+          ))}
+        </div>
+        
+        <style>
+          {`
+            @keyframes float {
+              0% {
+                transform: translate(0, 100vh) rotate(0deg);
+              }
+              100% {
+                transform: translate(0, -100px) rotate(360deg);
+              }
+            }
+          `}
+        </style>
+      </div>
+    ) : gameState === 'playing' || gameState === 'paused' ? (
+      <>
+        <div style={{
+          position: 'absolute',
+          width: '100vw',
+          height: '100vh',
+          top: 0,
+          left: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          pointerEvents: 'none',
+          padding: "10px"
+        }}>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between", 
+            width: "100%",
+            maxWidth: "400px",
+            padding: "5px 10px",
+            borderRadius: "5px",
+            zIndex: 10,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis"
+          }}>
+            <span style={{
+              fontSize: "min(4vw, 20px)",
+              fontWeight: "bold",
+              color: "#FFD700",
+              textShadow: "2px 2px 2px black",
+              fontFamily: "PixelOperator",
+              pointerEvents: "auto"
+            }}>
+              Score: {score}
+            </span>
+          </div>
+
+          <Canvas shadows
+            ref={canvasRef}
+            tabIndex={0}
+            style={{ 
+              outline: 'none', 
+              touchAction: 'none',
+              width: '100vw',
+              height: '100vh',
+              position: 'absolute',
+              userSelect: 'none',
+              top: 0,
+              left: 0,
+              zIndex: 1,
+              filter: gameState === 'paused' ? 'blur(2px)' : 'none' // Apply blur only when paused
+            }}
+            orthographic
+            camera={{
+              position: [0, 0, 10],
+              near: 0.1,
+              far: 1000,
+              zoom: 200
+            }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            onClick={handleDoubleTap}
+          >
+            {/* <Perf position="top-left" /> */}
+            <TetrisLights />
+            <group scale={[scaleFactor, scaleFactor, 1]}>
+              <Tetris />
+              {shapes.map((shape, index) => (
+                <ShapeMovement
+                  key={shape.id + index}
+                  shapeState={shape}
+                  onUpdatePosition={handleUpdatePosition}
+                  updateAndLandShape={updateAndLandShape}
+                  onRotate={handleRotate}
+                  isGameOver={isGameOver}
+                  isValidPosition={isValidPosition}
+                  gameState={gameState}
+                />
+              ))}
+            </group>     
+          </Canvas>
+
+          {/* Conditional pause overlay */}
+          {gameState === 'paused' && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 10,
+              pointerEvents: 'auto'
+            }}>
+              <div style={{
+                backgroundColor: 'rgba(30, 30, 30, 0.9)',
+                padding: '30px',
+                borderRadius: '10px',
+                color: 'white',
+                textAlign: 'center',
+                maxWidth: '400px',
+                boxShadow: '0 0 20px rgba(255, 215, 0, 0.3)'
+              }}>
+                <h2 style={{ color: '#FFD700', fontSize: '28px', marginTop: 0 }}>Game Paused</h2>
+                <p style={{ fontSize: '16px', margin: '20px 0' }}>
+                  The game has been paused.
+                </p>
+                <button 
+                  onClick={resumeGame}
+                  style={{
+                    padding: '12px 24px',
+                    backgroundColor: '#4CAF50',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                    fontSize: '18px',
+                    marginTop: '10px',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  Resume Game
+                </button>
+                <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
+                  <button 
+                    onClick={startGame}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#3498db',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '5px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    Restart
+                  </button>
+                  <button 
+                    onClick={() => setGameState('start')}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#e74c3c',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '5px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    Main Menu
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </>
+    ) : gameState === 'gameOver' ? (
       <div style={{
         position: 'absolute',
         top: '50%',
@@ -919,67 +1329,13 @@ function App() {
         </button>
       </div>
     ) : (
-        <>
-        <div style={{
-          position: "absolute",
-          top: "10px",
-          left: "10px",
-          fontSize: "20px",
-          fontWeight: "bold",
-          textAlign: 'center',
-          color: "#FFD700", // Gold color for visibility
-          textShadow: "2px 2px 2px black",
-          fontFamily: "PixelOperator"
-        }}>
-          Score: {score}
-        </div>
+      null
+    )
 
+  
+  }  
+  </>
 
-
-        <Canvas shadows
-          ref={canvasRef}
-          tabIndex={0}
-          style={{ 
-            outline: 'none', 
-            touchAction: 'none',
-            width: '100%',
-            height: '100%',
-            userSelect: 'none'
-          }}
-          orthographic
-          camera={{
-            position: [0, 0, 10],
-            fov: 90,
-            near: 0,
-            far: 1000,
-            zoom: 200
-          }}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onDoubleClick={handleDoubleTap}
-        >
-          {/* <Perf position="top-left" /> */}
-          <TetrisLights />
-          <group scale={[scaleFactor, scaleFactor, 1]}>
-            <Tetris />
-            {shapes.map((shape, index) => (
-              <ShapeMovement
-                key={shape.id + index}
-                shapeState={shape}
-                onUpdatePosition={handleUpdatePosition}
-                updateAndLandShape={updateAndLandShape}
-                onRotate={handleRotate}
-                isGameOver={isGameOver}
-                isValidPosition={isValidPosition}
-              />
-            ))}
-          </group>        
-        </Canvas>
-        </>
-      )}
-
-    </>
   )
 }
 

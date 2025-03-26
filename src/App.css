@@ -9,3 +9,9 @@ body,
     height: 100%;
     overflow: hidden;
 }
+
+@font-face {
+    font-family: 'PixelOperator';
+    src: url('/pixel_operator/PixelOperator8.ttf') format('truetype');
+  }
+  

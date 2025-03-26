@@ -9,6 +9,7 @@ import { Figures } from './components/figures'
 import TetrisLights from './components/TetrisLights'
 import { useSpring, animated } from '@react-spring/three'
 import { Perf } from 'r3f-perf'
+import EnvironmentMap from './components/Environment'
 
 type GridCell = {
   occupied: boolean,
@@ -858,9 +859,6 @@ function App() {
 
   return (
     <>
-      <div style={{ position: 'absolute', top: 10, left: 10, color: 'white' }}>
-        Score: {score}
-      </div>
       {isGameOver ? (
       <div style={{
         position: 'absolute',
@@ -921,6 +919,23 @@ function App() {
         </button>
       </div>
     ) : (
+        <>
+        <div style={{
+          position: "absolute",
+          top: "10px",
+          left: "10px",
+          fontSize: "20px",
+          fontWeight: "bold",
+          textAlign: 'center',
+          color: "#FFD700", // Gold color for visibility
+          textShadow: "2px 2px 2px black",
+          fontFamily: "PixelOperator"
+        }}>
+          Score: {score}
+        </div>
+
+
+
         <Canvas shadows
           ref={canvasRef}
           tabIndex={0}
@@ -944,7 +959,7 @@ function App() {
           onTouchEnd={handleTouchEnd}
           onDoubleClick={handleDoubleTap}
         >
-          <Perf position="top-left" />
+          {/* <Perf position="top-left" /> */}
           <TetrisLights />
           <group scale={[scaleFactor, scaleFactor, 1]}>
             <Tetris />
@@ -961,6 +976,7 @@ function App() {
             ))}
           </group>        
         </Canvas>
+        </>
       )}
 
     </>

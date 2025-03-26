@@ -1,5 +1,8 @@
 import React, { Component, createRef, useEffect, useState } from 'react'
 import { useSpring, animated } from '@react-spring/three';
+import { TextureLoader } from 'three';
+import { useLoader } from '@react-three/fiber';
+import * as THREE from 'three';
 
 export type ShapeType = 'T' | 'L' | 'I' | 'O' | 'S' | 'Z' | 'J' | 'custom';
 
@@ -108,7 +111,7 @@ export class Shape extends Component<{
               null
             )
           })
-        )}
+        )} 
       </group>
     )
   }
@@ -121,7 +124,12 @@ function TetrisBlock({ x, y }: { x: number, y: number }) {
     to: { position: [x, y, 0.1] },
     config: { mass: 0.5, tension: 180, friction: 24 }
   });
+  const blockTexture = useLoader(TextureLoader, '/72164.jpg')
+  blockTexture.colorSpace = THREE.SRGBColorSpace
+
   
+
+
   useEffect(() => {
     setPrevPos({ x, y });
   }, [x, y]);
@@ -140,23 +148,24 @@ function TetrisBlock({ x, y }: { x: number, y: number }) {
       onPointerOut={() => setHovered(false)}
     >
       <boxGeometry args={[0.25, 0.25, 0.05, 1, 1, 1]} />
-      <animated.meshStandardMaterial 
+      <animated.meshStandardMaterial
         color="#FF8E00"
         emissive="#FF8E00"
         emissiveIntensity={emissiveIntensity}
         roughness={0.3}
-        metalness={0.2}
+        metalness={0.2}      
       />
       
       {/* Top beveled edge for 3D effect */}
       <mesh position={[0, 0, 0.026]} rotation={[0, 0, 0]}>
         <planeGeometry args={[0.22, 0.22]} />
         <meshBasicMaterial 
-          color="#FFB04D" 
-          transparent={true} 
-          opacity={0.6} 
+          map={blockTexture} 
+          roughness={0.3}
+          metalness={0.2}
         />
       </mesh>
+
     </animated.mesh>
   );
 }

@@ -1,7 +1,7 @@
 import React, { Component, useRef, useEffect } from 'react'
-import { useThree } from '@react-three/fiber';
+import { useThree, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
-
+import { TextureLoader } from "three";
 
 
 const Tetris: React.FC = () => {
@@ -13,6 +13,7 @@ const Tetris: React.FC = () => {
 
     // Use useThree hook inside the functional component
     const { size } = useThree();
+    const texture = useLoader(TextureLoader, "/is-he-friendly-655529.png");
     const isMobile = size.width < 768;	  
     
     // Scale factor for mobile
@@ -44,8 +45,8 @@ const Tetris: React.FC = () => {
             	{/* Background Board */}
             	<mesh position={[0, 0, 0]}>
             	    <planeGeometry args={[BOARD_WIDTH, BOARD_HEIGHT]} />
-            	    <meshBasicMaterial color="black" opacity={0.5} transparent />
-            	</mesh>
+                    <meshBasicMaterial map={texture} />
+                </mesh>
 
             	{/* Grid Points */}
 				<instancedMesh ref={gridRef} args={[null, null, num_row_points * num_col_points]}>

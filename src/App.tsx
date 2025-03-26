@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback, use } from 'react'
-import { Canvas, events, useFrame, useThree } from '@react-three/fiber'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { Canvas, useFrame, } from '@react-three/fiber'
 import './App.css'
 import Tetris from './Tetris'
 import { Shape } from './components/Shape'
@@ -7,9 +7,7 @@ import * as THREE from 'three'
 import { ShapeType } from './components/Shape'
 import { Figures } from './components/figures'
 import TetrisLights from './components/TetrisLights'
-import { useSpring, animated, to } from '@react-spring/three'
-import { Perf } from 'r3f-perf'
-import { Html } from "@react-three/drei"; // Import Html component
+import { useSpring, animated} from '@react-spring/three'
 
 
 type GridCell = {
@@ -37,17 +35,17 @@ type ShapeState = {
   removed?: boolean,
 }
 
-const BOARD_HEIGHT = 5;
-const CELL_SIZE = 0.25;
+// const BOARD_HEIGHT = 5;
+// const CELL_SIZE = 0.25;
 
 // Debounce function to limit how often a function can be called
-function debounce(func: Function, wait: number) {
-  let timeout: ReturnType<typeof setTimeout>;
-  return function(...args: any[]) {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-}
+// function debounce(func: Function, wait: number) {
+//   let timeout: ReturnType<typeof setTimeout>;
+//   return function(...args: any[]) {
+//     clearTimeout(timeout);
+//     timeout = setTimeout(() => func(...args), wait);
+//   };
+// }
 
 
 function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRotate, isGameOver, isValidPosition,  gameState }: {
@@ -71,11 +69,10 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
   const crossedGridLine = useRef(false);
 
   const startY = 2.5;
-  const endY = -2.75;
+
   const gridSize = 0.25;
   
   const normalSpeed = 0.5; // Normal falling speed
-  const fastSpeed = 1.5;   // Fast falling speed when down arrow is pressed
 
   const [speed, setSpeed] = useState(normalSpeed);
   
@@ -326,13 +323,14 @@ function App() {
       const element = document.documentElement; // Fullscreen the whole page
       if (element.requestFullscreen) {
         element.requestFullscreen();
-      } else if (element.mozRequestFullScreen) { // Firefox
-        element.mozRequestFullScreen();
-      } else if (element.webkitRequestFullscreen) { // Chrome, Safari, Edge
-        element.webkitRequestFullscreen();
-      } else if (element.msRequestFullscreen) { // IE
-        element.msRequestFullscreen();
-      }
+      } 
+      // else if (element.mozRequestFullScreen) { // Firefox
+      //   element.mozRequestFullScreen();
+      // } else if (element.webkitRequestFullscreen) { // Chrome, Safari, Edge
+      //   element.webkitRequestFullscreen();
+      // } else if (element.msRequestFullscreen) { // IE
+      //   element.msRequestFullscreen();
+      // }
       document.removeEventListener("click", enterFullScreen); // Remove listener after activation
     };
 
@@ -487,6 +485,7 @@ function App() {
         console.log("Status: ", response.status);
       })
       .then(data => {
+        console.log(data);
         fetchHighScores();
       })
       .catch(error => {
@@ -577,10 +576,10 @@ function App() {
       // Process rows from bottom to top
       for (const completedRow of completedRows.sort((a, b) => b - a)) {
         // Update shapes for this row
-        const updatedShapes = updateShapesForRow(completedRow, grid, shapes);
+        const updatedShapes = updateShapesForRow(completedRow, shapes);
         
         // Update grid for this row
-        const updatedGrid = updateGridForRow(completedRow, grid, updatedShapes);
+        const updatedGrid = updateGridForRow(completedRow, grid);
     
         // Move shapes down
         const { shapes: movedShapes, grid: movedGrid } = moveShapesDown(
@@ -636,7 +635,6 @@ function App() {
 
   const updateShapesForRow = (
     completedRow: number, 
-    currentGrid: GridCell[][], 
     currentShapes: ShapeState[]
   ): ShapeState[] => {
     // Update shapes that have blocks in completed rows
@@ -719,8 +717,7 @@ function App() {
   // Pure function to update grid for a completed row
   const updateGridForRow = (
     completedRow: number, 
-    currentGrid: GridCell[][], 
-    shapes: ShapeState[]
+    currentGrid: GridCell[][]
   ): GridCell[][] => {
     const newGrid = [...currentGrid.map(row => [...row])];
     
@@ -807,7 +804,7 @@ function App() {
     return { shapes: updatedShapes, grid: newGrid };
   };
 
-  const handleUpdatePosition = (id: number, x: number, y: number, callback?: () => void) => {
+  const handleUpdatePosition = (id: number, x: number, y: number) => {
     // Keep track of the target position
     if (gameState === 'paused') return;
 
@@ -928,21 +925,20 @@ function App() {
   const touchStartY = useRef(0);
   const touchEndY = useRef(0);
   
-  const handleTouchStart = (e) => {
+  const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
   };
   
-  const handleTouchMove = (e) => {
+  const handleTouchMove = (e: React.TouchEvent) => {
     touchEndX.current = e.touches[0].clientX;
     touchEndY.current = e.touches[0].clientY;
   };
-  
   const handleTouchEnd = useCallback(() => {
     if (gameState === 'paused') return;
 
     const deltaX = touchEndX.current - touchStartX.current;
-    const deltaY = touchEndY.current - touchStartY.current;
+    // const deltaY = touchEndY.current - touchStartY.current;
   
     const activeShape = shapes.find(shape => !shape.hasLanded);
 

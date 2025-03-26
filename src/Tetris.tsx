@@ -1,5 +1,5 @@
-import React, { Component, useRef, useEffect } from 'react'
-import { useThree, useLoader } from '@react-three/fiber';
+import React, { useRef, useEffect } from 'react'
+import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { TextureLoader } from "three";
 
@@ -11,13 +11,7 @@ const Tetris: React.FC = () => {
     const BOARD_WIDTH = 2.5;
     const BOARD_HEIGHT = 5.0;
 
-    // Use useThree hook inside the functional component
-    const { size } = useThree();
     const texture = useLoader(TextureLoader, "/is-he-friendly-655529.png");
-    const isMobile = size.width < 768;	  
-    
-    // Scale factor for mobile
-    const scaleFactor = isMobile ? 0.5 : 1.0;
 
 	const gridRef = useRef<THREE.InstancedMesh>(null);
     const dummy = new THREE.Object3D();
@@ -47,11 +41,10 @@ const Tetris: React.FC = () => {
             	    <planeGeometry args={[BOARD_WIDTH, BOARD_HEIGHT]} />
                     <meshBasicMaterial map={texture} />
                 </mesh>
-
             	{/* Grid Points */}
-				<instancedMesh ref={gridRef} args={[null, null, num_row_points * num_col_points]}>
+				<instancedMesh ref={gridRef} args={[undefined, undefined, num_row_points * num_col_points]}>
 				<octahedronGeometry args={[0.015, 0]} /> {/* Only 8 triangles per point */}
-				<meshBasicMaterial color="black" opacity={0.5} />
+				<meshBasicMaterial color="black" opacity={0.5} transparent />
             	</instancedMesh>
 
 			</group>

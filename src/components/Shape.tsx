@@ -1,4 +1,4 @@
-import React, { Component, createRef, useEffect, useState } from 'react'
+import { Component, useEffect, useState } from 'react'
 import { useSpring, animated } from '@react-spring/three';
 import { TextureLoader } from 'three';
 import { useLoader } from '@react-three/fiber';
@@ -84,7 +84,7 @@ export class Shape extends Component<{
   }
 
   render() {
-    let current_shape = this.props.customMatrix || shape[this.props.shapeType];
+    let current_shape = this.props.customMatrix || shape[this.props.shapeType as keyof typeof shape]
     const rotations = (this.props.rotation || 0) % 4;
 
     // Apply rotations
@@ -160,9 +160,7 @@ function TetrisBlock({ x, y }: { x: number, y: number }) {
       <mesh position={[0, 0, 0.026]} rotation={[0, 0, 0]}>
         <planeGeometry args={[0.22, 0.22]} />
         <meshBasicMaterial 
-          map={blockTexture} 
-          roughness={0.3}
-          metalness={0.2}
+          map={blockTexture}
         />
       </mesh>
 

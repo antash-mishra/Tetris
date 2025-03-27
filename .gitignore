@@ -13,6 +13,7 @@ dist-ssr
 *.local
 server/target/
 server/score.db
+server/*
 
 # Editor directories and files
 .vscode/*

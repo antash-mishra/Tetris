@@ -142,8 +142,8 @@ function TetrisBlock({ x, y }: { x: number, y: number }) {
   });
   
   return (
-    <animated.mesh 
-      position={position}
+    <animated.mesh
+      position={position as any}
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
     >

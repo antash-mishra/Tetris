@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Canvas, useFrame, } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import './App.css'
 import Tetris from './Tetris'
 import { Shape } from './components/Shape'
@@ -8,8 +8,6 @@ import { ShapeType } from './components/Shape'
 import { Figures } from './components/figures'
 import TetrisLights from './components/TetrisLights'
 import { useSpring, animated } from '@react-spring/three'
-import { Perf } from 'r3f-perf'
-
 
 type GridCell = {
   occupied: boolean,
@@ -245,7 +243,7 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
     <>
       <animated.group
         ref={shape}
-        position={spring.position}>
+        position={spring.position as any}>
         <Shape
           shapeType={shapeState.type}
           rotation={shapeState.rotation}
@@ -326,21 +324,6 @@ function App() {
 
       // Request fullscreen before starting the game
       requestFullscreen(document.documentElement);
-
-      // Send username to API
-      const response = fetch('http://192.168.1.9:8080/user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: username }),
-      });
-
-      if (!response.ok) {
-        setGameState('playing');
-        throw new Error('Failed to register username');
-        
-      }
 
       // Start the game
       resetGame();
@@ -483,9 +466,11 @@ function App() {
 
   // Function to fetch high scores
   const fetchHighScores = () => {
+    console.log(isLoadingScores);
+
     setIsLoadingScores(true);
   
-    fetch('http://192.168.1.10:8080/scores')
+    fetch('https://server-restless-leaf-9857.fly.dev/scores')
       .then(response => {
         if (!response.ok) {
           throw new Error('Network response was not ok');
@@ -530,7 +515,7 @@ function App() {
       
       console.log("USer: ", username, "Score: ", score)
 
-      fetch('https://eae7-2401-4900-1cb8-6eaf-a7b6-81d3-5c80-59b8.ngrok-free.app/scores', {
+      fetch('https://server-restless-leaf-9857.fly.dev/scores', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1278,7 +1263,7 @@ function App() {
               onTouchEnd={handleTouchEnd}
               onClick={handleDoubleTap}
             >
-              <Perf position="top-left" />
+              {/* <Perf position="top-left" /> */}
               <TetrisLights />
               <group scale={[scaleFactor, scaleFactor, 1]}>
                 <Tetris />

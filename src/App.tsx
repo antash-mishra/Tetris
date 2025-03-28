@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import './App.css'
 import Tetris from './Tetris'
 import { Shape } from './components/Shape'
@@ -325,7 +325,7 @@ function App() {
     try {
 
       // Request fullscreen before starting the game
-      // requestFullscreen(document.documentElement);
+      requestFullscreen(document.documentElement);
 
       // Start the game
       resetGame();

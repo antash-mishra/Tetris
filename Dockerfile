@@ -1,45 +1,43 @@
-# syntax = docker/dockerfile:1
+# Use an official Node runtime as the build environment
+FROM node:20-alpine AS builder
 
-# Adjust NODE_VERSION as desired
-ARG NODE_VERSION=20.17.0
-FROM node:${NODE_VERSION}-slim AS base
-
-LABEL fly_launch_runtime="Node.js"
-
-# Node.js app lives here
+# Set the working directory in the container
 WORKDIR /app
 
-# Set production environment
-ENV NODE_ENV="production"
+# Copy package.json and package-lock.json (or yarn.lock)
+COPY package*.json ./
 
+# Install project dependencies
+RUN npm ci
 
-# Throw-away build stage to reduce size of final image
-FROM base AS build
-
-# Install packages needed to build node modules
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
-
-# Install node modules
-COPY package-lock.json package.json ./
-RUN npm ci --include=dev
-
-# Copy application code
+# Copy the rest of the project files
 COPY . .
 
-# Build application
+# Build the project
 RUN npm run build
 
-# Remove development dependencies
-RUN npm prune --omit=dev
+# Use Nginx as the production server
+FROM nginx:alpine
 
+# Remove default nginx static files
+RUN rm -rf /usr/share/nginx/html/*
 
-# Final stage for app image
-FROM base
+# Copy the built files from the builder stage
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy built application
-COPY --from=build /app /app
+# Create a custom nginx configuration
+RUN echo 'server { \
+    listen 8080; \
+    server_name 0.0.0.0; \
+    location / { \
+        root /usr/share/nginx/html; \
+        index index.html index.htm; \
+        try_files $uri $uri/ /index.html; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 
-# Start the server by default, this can be overwritten at runtime
-EXPOSE 3000
-CMD [ "node", "index.js" ]
+# Expose the default port
+EXPOSE 8080
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import './App.css'
 import Tetris from './Tetris'
 import { Shape } from './components/Shape'
@@ -45,6 +45,7 @@ type ShapeState = {
 //     timeout = setTimeout(() => func(...args), wait);
 //   };
 // }
+
 
 
 function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRotate, isGameOver, isValidPosition, gameState }: {
@@ -270,6 +271,7 @@ function App() {
   const [inputError, setInputError] = useState('');
   const [isLoadingScores, setIsLoadingScores] = useState(false);
 
+
   useEffect(() => {
     // Fetch high scores when component mounts
     fetchHighScores();
@@ -323,7 +325,7 @@ function App() {
     try {
 
       // Request fullscreen before starting the game
-      requestFullscreen(document.documentElement);
+      // requestFullscreen(document.documentElement);
 
       // Start the game
       resetGame();
@@ -683,6 +685,8 @@ function App() {
 
       // Check if this shape has any cells in the completed row
       const hasBlocksInCompletedRow = shape.cells?.some(cell => (cell.y) === completedRow);
+      console.log("has block: ", hasBlocksInCompletedRow)
+
       if (!hasBlocksInCompletedRow) return shape;
 
       // Get the shape matrix, considering custom matrices
@@ -690,46 +694,48 @@ function App() {
         ? shape.customMatrix
         : getShapeMatrix(shape.type, shape.rotation);
 
+      // Get all cell.y
+      const rows: number[] = [...new Set(shape.cells?.map(cell => cell.y))];
+
 
       // Get the grid position of the shape
-      const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
+      // const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
 
       // Creating matrix with removed blocks
       let newMatrix = [...matrix];
+      let newCells = [...shape.cells || []];
+      let newPosition = { ...shape.position };
+
       let modified = false;
 
       // Check each cell in the shape matrix
-      for (let row = (matrix.length - 1); row >= 0; row--) {
-        const gridRowPosition = (gridY + 1) - (matrix.length - 1 - row);
+      for (let row = (rows.length - 1); row >= 0; row--) {
+        const gridRowPosition = rows[row];
 
         // If this row of the shape coincides with a completed row
-        if (gridRowPosition === (completedRow)) {
-          // Convert the matrix row to array, remove the blocks, and convert back
-          let matrixRow = newMatrix[row].split('');
-          for (let col = 0; col < matrixRow.length; col++) {
-            const gridColPosition = gridX + col;
-            // Check if this position is part of the completed row
-            if (gridColPosition >= 0 &&
-              gridColPosition < 10 &&
-              grid[completedRow][gridColPosition].shapeId === shape.id) {
-              matrixRow[col] = ' ';
-              modified = true;
+        if (gridRowPosition === completedRow) {
+          // Remove row which is on completed row
+          newMatrix.splice(row, 1);
+          newCells = newCells.filter(cell => cell.y !== gridRowPosition);
+          modified = true;
+        }
+        else if (gridRowPosition > completedRow) {
+          newCells = newCells.map(cell => {
+            if (cell.y === gridRowPosition) {
+              return { ...cell, y: cell.y };
             }
-          }
-          newMatrix[row] = matrixRow.join('');
+            return cell;
+          });
+        } else {
+          break;
         }
       }
 
+      if (completedRow === Math.min(...rows)) {
+        newPosition = { ...shape.position, y: shape.position.y + 0.25 };
+      }
+
       if (!modified) return shape;
-
-      // Remove empty rows from the top and bottom of the matrix
-      while (newMatrix.length > 0 && newMatrix[0].trim() === '') {
-        newMatrix.shift();
-      }
-
-      while (newMatrix.length > 0 && newMatrix[newMatrix.length - 1].trim() === '') {
-        newMatrix.pop();
-      }
 
       // If the entire shape was cleared, mark it for removal
       if (newMatrix.length === 0) {
@@ -737,18 +743,15 @@ function App() {
       }
 
       // Update cells array to remove cleared blocks
-      const updatedCells = shape.cells?.filter(cell => (cell.y) !== completedRow) || [];
+      // const updatedCells = shape.cells?.filter(cell => (cell.y) !== completedRow) || [];
 
       // Return shape with updated matrix and cells, but same position
       return {
         ...shape,
         type: 'custom' as ShapeType,
         customMatrix: newMatrix,
-        position: {
-          ...shape.position,
-          y: shape.position.y + 0.25
-        },
-        cells: updatedCells,
+        position: newPosition,
+        cells: newCells,
       };
     }).filter(shape => !shape.removed);
   };
@@ -765,7 +768,7 @@ function App() {
     newGrid.splice(completedRow, 1);
 
     // Add new empty row at top
-    newGrid.unshift(Array(10).fill({ occupied: false, shapeId: null }));
+    newGrid.push(Array(10).fill({ occupied: false, shapeId: null }));
 
     return newGrid;
   };
@@ -862,7 +865,7 @@ function App() {
               x: x,
               y: y
             }
-          };
+          }; 
         }
         return shape;
       });
@@ -1256,8 +1259,10 @@ function App() {
                 position: [0, 0, 10],
                 near: 0.1,
                 far: 1000,
-                zoom: 200
+                zoom: 200,
+                
               }}
+              resize={{ scroll: false }}
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}

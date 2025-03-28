@@ -594,7 +594,9 @@ function App() {
         const hasActiveShape = shapes.some(shape => !shape.hasLanded);
         if (!hasActiveShape) {
           console.log("Spawning new shape");
-          spawnNewShape();
+          setTimeout(() => {
+            spawnNewShape();
+          }, 500);
         }
       } finally {
         // Clear processing flag when everything is done
@@ -696,10 +698,9 @@ function App() {
 
       // Get all cell.y
       const rows: number[] = [...new Set(shape.cells?.map(cell => cell.y))];
-
-
-      // Get the grid position of the shape
-      // const [gridX, gridY] = worldToGrid(shape.position.x, shape.position.y);
+      const max_row = Math.max(...rows);
+      const min_row = Math.min(...rows);
+    
 
       // Creating matrix with removed blocks
       let newMatrix = [...matrix];
@@ -719,19 +720,22 @@ function App() {
           newCells = newCells.filter(cell => cell.y !== gridRowPosition);
           modified = true;
         }
-        else if (gridRowPosition > completedRow) {
+
+        // Moved block a position down where completed row is in between the highest and lowest position of blocks  
+        else if ((gridRowPosition > completedRow) && (completedRow !== max_row) && (completedRow !== min_row))  {
           newCells = newCells.map(cell => {
             if (cell.y === gridRowPosition) {
-              return { ...cell, y: cell.y };
+              return { ...cell, y: cell.y - 1 };
+          
             }
+
             return cell;
           });
-        } else {
-          break;
         }
       }
 
-      if (completedRow === Math.min(...rows)) {
+
+      if (completedRow === min_row) {
         newPosition = { ...shape.position, y: shape.position.y + 0.25 };
       }
 

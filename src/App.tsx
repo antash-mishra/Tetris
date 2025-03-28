@@ -72,11 +72,10 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
 
   const gridSize = 0.25;
 
-  const normalSpeed = 0.5; // Normal falling speed
+  const normalSpeed = 0.7; // Normal falling speed  
 
   const [speed, setSpeed] = useState(normalSpeed);
 
-  console.log("GameState: ", gameState);
   // Handle keyboard controls
   useEffect(() => {
     if (isGameOver || gameState === 'paused') return; // Prevent further actions if game is over
@@ -1273,6 +1272,7 @@ function App() {
               onClick={handleDoubleTap}
             >
               {/* <Perf position="top-left" /> */}
+              
               <TetrisLights />
               <group scale={[scaleFactor, scaleFactor, 1]}>
                 <Tetris />

@@ -1,6 +1,6 @@
 import { Component, useEffect, useState } from 'react'
 import { useSpring, animated } from '@react-spring/three';
-import { TextureLoader } from 'three';
+import { Color, TextureLoader } from 'three';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -57,7 +57,8 @@ const shape = {
 export class Shape extends Component<{
   shapeType: ShapeType,
   rotation?: number,
-  customMatrix?: string[]
+  customMatrix?: string[],
+  color?: string
 }> {
 
   rotateShape(matrix: string[]): string[] {
@@ -104,7 +105,7 @@ export class Shape extends Component<{
             if (cell === '#') {
               // console.log(((current_shape.length - indexX)*0.25)+(0.24/2))
               return (
-                <TetrisBlock key={indexY+indexX} x={(indexY*0.25)+(0.24/2)} y={((current_shape.length - indexX)*0.25)+(0.24/2)} />
+                <TetrisBlock key={indexY+indexX} x={(indexY*0.25)+(0.24/2)} y={((current_shape.length - indexX)*0.25)+(0.24/2)} color={this.props.color} />
               )
             }
             return (
@@ -117,11 +118,11 @@ export class Shape extends Component<{
   }
 }
 
-function TetrisBlock({ x, y }: { x: number, y: number }) {
+function TetrisBlock({ x, y, color }: { x: number, y: number, color?: string }) {
   const [prevPos, setPrevPos] = useState({ x, y });
   const { position } = useSpring({
-    from: { position: [prevPos.x, prevPos.y, 0.1] },
-    to: { position: [x, y, 0.1] },
+    from: { position: [prevPos.x, prevPos.y, 0.01] },
+    to: { position: [x, y, 0.01] },
     config: { mass: 0.5, tension: 180, friction: 24 }
   });
   const blockTexture = useLoader(TextureLoader, '/72164.jpg')
@@ -140,6 +141,8 @@ function TetrisBlock({ x, y }: { x: number, y: number }) {
     emissiveIntensity: hovered ? 0.5 : 0,
     config: { mass: 1, tension: 280, friction: 60 }
   });
+
+  console.log( "Color: ", color)
   
   return (
     <animated.mesh
@@ -149,18 +152,20 @@ function TetrisBlock({ x, y }: { x: number, y: number }) {
     >
       <boxGeometry args={[0.25, 0.25, 0.05, 1, 1, 1]} />
       <animated.meshStandardMaterial
-        color="#FF8E00"
-        emissive="#FF8E00"
+        color= {color || "#FF8E00"}
+        emissive={color || "#FF8E00"}
         emissiveIntensity={emissiveIntensity}
         roughness={0.3}
-        metalness={0.2}      
+        metalness={0.2}     
+        depthWrite={false} 
       />
       
       {/* Top beveled edge for 3D effect */}
-      <mesh position={[0, 0, 0.026]} rotation={[0, 0, 0]}>
+      <mesh position={[0, 0, 0.02]} rotation={[0, 0, 0]}>
         <planeGeometry args={[0.22, 0.22]} />
         <meshBasicMaterial 
           map={blockTexture}
+          depthWrite={false} 
         />
       </mesh>
 

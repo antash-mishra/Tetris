@@ -49,7 +49,13 @@ async fn get_scores(
 ) -> impl Responder {
     let conn = state.db_pool.get().expect("Failed to get connection");
 
-    let mut scores = conn.prepare("SELECT name, score, RANK() OVER (ORDER BY score DESC) AS rank FROM users")
+    let mut scores = conn.prepare("WITH top_scores AS (
+    	   SELECT DISTINCT score FROM users ORDER BY score DESC LIMIT 10
+    	)
+	 SELECT name, score, RANK() OVER (ORDER BY score DESC) AS rank 
+	 FROM users WHERE score IN (SELECT score FROM top_scores)
+	 ORDER BY score DESC LIMIT 10;
+	")
         .expect("Failed to prepare statement");
 
     let score_iter = scores.query_map([], |row| {

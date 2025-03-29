@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import './App.css'
 import Tetris from './Tetris'
 import { Shape } from './components/Shape'
@@ -32,6 +32,7 @@ type ShapeState = {
   customMatrix?: string[],
   cells?: { x: number; y: number }[]; // Stores exact occupied grid positions
   removed?: boolean,
+  color: string
 }
 
 // const BOARD_HEIGHT = 5;
@@ -45,6 +46,22 @@ type ShapeState = {
 //     timeout = setTimeout(() => func(...args), wait);
 //   };
 // }
+
+
+function ResponsiveOrthCamera() {
+  const {camera, size} = useThree()
+
+  useEffect(() => {
+    // Type guard to ensure we're working with an OrthographicCamera
+    if (camera instanceof THREE.PerspectiveCamera) {
+      console.log("cams: ", camera)
+    }
+  }, [size, camera])
+
+  console.log("Camera: ", camera)
+
+  return null
+}
 
 
 
@@ -247,7 +264,8 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
         <Shape
           shapeType={shapeState.type}
           rotation={shapeState.rotation}
-          customMatrix={shapeState.customMatrix} />
+          customMatrix={shapeState.customMatrix} 
+          color={shapeState.color}/>
       </animated.group>
     </>
   );
@@ -269,6 +287,7 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inputError, setInputError] = useState('');
   const [isLoadingScores, setIsLoadingScores] = useState(false);
+  const colors = ["#FF8E00", "#00C3FF", "#32CD32", "#FFD700", "#DC143C", "#8A2BE2"];
 
 
   useEffect(() => {
@@ -420,7 +439,7 @@ function App() {
         shapeMaxWidth: Math.max(...Figures[randomType].map((row) => {
           return row.split('').length
         }).values()),
-
+        color: colors[Math.floor(Math.random() * colors.length)]
       }]);
       setNextId(2);
       setIsInitialized(true);
@@ -441,7 +460,8 @@ function App() {
       rotation: 0,
       shapeMaxWidth: Math.max(...Figures[randomType].map((row) => {
         return row.split('').length
-      }).values())
+      }).values()),
+      color: colors[Math.floor(Math.random() * colors.length)]
     };
 
     setShapes(prev => [...prev, newShape]);
@@ -1245,11 +1265,13 @@ function App() {
             <Canvas shadows
               ref={canvasRef}
               tabIndex={0}
+              color="#1F1F1F"
               style={{
                 outline: 'none',
                 touchAction: 'none',
                 width: '100vw',
                 height: '100vh',
+                backgroundColor: '#1F1F1F',
                 position: 'absolute',
                 userSelect: 'none',
                 top: 0,
@@ -1257,15 +1279,17 @@ function App() {
                 zIndex: 1,
                 filter: gameState === 'paused' ? 'blur(2px)' : 'none' // Apply blur only when paused
               }}
-              orthographic
               camera={{
                 position: [0, 0, 10],
+                fov: 35,
                 near: 0.1,
-                far: 1000,
-                zoom: 200,
-                
+                far: 200
               }}
-              resize={{ scroll: false }}
+              
+              resize={{ 
+                scroll: false, 
+              }}
+              gl={{ alpha: true, antialias: true, depth: true, stencil: true }}
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
@@ -1274,7 +1298,7 @@ function App() {
               {/* <Perf position="top-left" /> */}
               
               <TetrisLights />
-              <group scale={[scaleFactor, scaleFactor, 1]}>
+              <group>
                 <Tetris />
                 {shapes.map((shape, index) => (
                   <ShapeMovement

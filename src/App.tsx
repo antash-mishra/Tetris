@@ -35,19 +35,6 @@ type ShapeState = {
   color: string
 }
 
-// const BOARD_HEIGHT = 5;
-// const CELL_SIZE = 0.25;
-
-// Debounce function to limit how often a function can be called
-// function debounce(func: Function, wait: number) {
-//   let timeout: ReturnType<typeof setTimeout>;
-//   return function(...args: any[]) {
-//     clearTimeout(timeout);
-//     timeout = setTimeout(() => func(...args), wait);
-//   };
-// }
-
-
 function ResponsiveOrthCamera() {
   const {camera, size} = useThree()
 
@@ -57,8 +44,6 @@ function ResponsiveOrthCamera() {
       console.log("cams: ", camera)
     }
   }, [size, camera])
-
-  console.log("Camera: ", camera)
 
   return null
 }
@@ -533,8 +518,6 @@ function App() {
     // Check for game over condition
     if ((gridY + shapeMatrix.length) >= 18) {
       setIsGameOver(true);
-      
-      console.log("USer: ", username, "Score: ", score)
 
       fetch('https://server-restless-leaf-9857.fly.dev/scores', {
         method: 'POST',
@@ -589,82 +572,91 @@ function App() {
     );
   };
 
-
   const processingRowsRef = useRef(false);
-
-  useEffect(() => {
-    const handleLandedShape = async () => {
-      if (gameState === 'paused') return;
-      // If we're already processing, don't start another process
-      if (processingRowsRef.current) return;
-
-      // Set processing flag immediately to block any other executions
-      processingRowsRef.current = true;
-
-      try {
-        const completedRows = checkCompletedRows(grid);
-
-        if (completedRows.length > 0) {
-          // Process all completed rows
-          await handleCompletedRows(completedRows);
-        }
-
-        // After any processing (rows or not), check if we need to spawn
-        const hasActiveShape = shapes.some(shape => !shape.hasLanded);
-        if (!hasActiveShape) {
-          console.log("Spawning new shape");
-          setTimeout(() => {
-            spawnNewShape();
-          }, 500);
-        }
-      } finally {
-        // Clear processing flag when everything is done
-        processingRowsRef.current = false;
-      }
-    };
-
-    // Only run this effect if there's a landed shape
-    if (shapes.some(shape => shape.hasLanded)) {
-      handleLandedShape();
-    }
-  }, [shapes, grid]); // Include grid in dependencies to catch completed rows
-
-  const handleCompletedRows = async (completedRows: number[]) => {
-    if (completedRows.length === 0) return;
-
-    // Update score once
-    setScore(prevScore => prevScore + completedRows.length * 10);
-
+  const pendingSpawnRef = useRef(false);
+  
+  const handleLandedShape = () => {
+    if (gameState === 'paused' || processingRowsRef.current) return;
+  
+    // Set processing flag immediately to block any other executions
+    processingRowsRef.current = true;
+  
     try {
-      // Process rows from bottom to top
-      for (const completedRow of completedRows.sort((a, b) => b - a)) {
-        // Update shapes for this row
-        const updatedShapes = updateShapesForRow(completedRow, shapes);
-
-        // Update grid for this row
-        const updatedGrid = updateGridForRow(completedRow, grid);
-
-        // Move shapes down
-        const { shapes: movedShapes, grid: movedGrid } = moveShapesDown(
-          completedRow,
-          updatedShapes,
-          updatedGrid
-        );
-
-        // Update state and wait for it to complete
-        await new Promise<void>(resolve => {
-          setShapes(movedShapes);
-          setGrid(movedGrid);
-          // Use setTimeout to ensure state updates are processed
-          setTimeout(resolve, 100); // Small delay between row updates
-        });
+      const completedRows = checkCompletedRows(grid);
+  
+      if (completedRows.length > 0) {
+        // Process all completed rows synchronously
+        handleCompletedRows(completedRows);
+      } else {
+        // Check if we need to spawn a new shape
+        checkAndScheduleSpawn();
       }
-
-    } catch (error) {
-      console.error("Error processing completed rows:", error);
+    } finally {
+      // Clear processing flag when everything is done
+      processingRowsRef.current = false;
     }
   };
-
+  
+  // Separate function to check and schedule spawn
+  const checkAndScheduleSpawn = () => {
+    const hasActiveShape = shapes.some(shape => !shape.hasLanded);
+    if (!hasActiveShape && !pendingSpawnRef.current) {
+      pendingSpawnRef.current = true;
+      console.log("Scheduling new shape spawn");
+      setTimeout(() => {
+        spawnNewShape();
+        pendingSpawnRef.current = false;
+      }, 500);
+    }
+  };
+  
+  useEffect(() => {
+    // Only run this effect if there's a landed shape and not during row processing
+    if (shapes.some(shape => shape.hasLanded) && !processingRowsRef.current) {
+      handleLandedShape();
+    }
+  }, [shapes]); // Only depend on shapes, not grid
+  
+  const handleCompletedRows = (completedRows: number[]) => {
+    if (completedRows.length === 0) return;
+  
+    // Update score once
+    setScore(prevScore => prevScore + completedRows.length * 10);
+  
+    // Sort rows from bottom to top
+    const sortedRows = [...completedRows].sort((a, b) => b - a);
+    
+    // Process all rows at once
+    let currentShapes = [...shapes];
+    let currentGrid = [...grid];
+    
+    // Process each row in sequence
+    for (const completedRow of sortedRows) {
+      // Update shapes for this row
+      currentShapes = updateShapesForRow(completedRow, currentShapes);
+      
+      // Update grid for this row
+      currentGrid = updateGridForRow(completedRow, currentGrid);
+      
+      // Move shapes down
+      const { shapes: movedShapes, grid: movedGrid } = moveShapesDown(
+        completedRow,
+        currentShapes,
+        currentGrid
+      );
+      
+      currentShapes = movedShapes;
+      currentGrid = movedGrid;
+    }
+    
+    // Batch update state once
+    setShapes(currentShapes);
+    setGrid(currentGrid);
+    
+    // Check if we need to spawn after processing all rows
+    checkAndScheduleSpawn();
+  };
+  
 
   const addShapeToGrid = (
     currentGrid: GridCell[][],
@@ -1008,8 +1000,8 @@ function App() {
     const activeShape = shapes.find(shape => !shape.hasLanded);
 
 
-    if (Math.abs(deltaX) > 10 && activeShape) {
-      const targetX = deltaX > 10
+    if (Math.abs(deltaX) > 50 && activeShape) {
+      const targetX = deltaX > 0
         ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1) * 0.25), activeShape.position.x + 0.25)
         : Math.max(-1.25, activeShape.position.x - 0.25);
 
@@ -1293,7 +1285,6 @@ function App() {
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
-              onClick={handleDoubleTap}
             >
               {/* <Perf position="top-left" /> */}
               

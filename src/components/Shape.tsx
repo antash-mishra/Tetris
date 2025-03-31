@@ -141,8 +141,6 @@ function TetrisBlock({ x, y, color }: { x: number, y: number, color?: string }) 
     emissiveIntensity: hovered ? 0.5 : 0,
     config: { mass: 1, tension: 280, friction: 60 }
   });
-
-  console.log( "Color: ", color)
   
   return (
     <animated.mesh

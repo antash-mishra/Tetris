@@ -789,7 +789,7 @@ function App() {
   };
 
   // Function to handle falling motion
-  const moveShapesDown = (
+  const moveShapesDown = (  
     completedRow: number,
     shapes: ShapeState[],
     currentGrid: GridCell[][]
@@ -948,9 +948,7 @@ function App() {
     }));
   };
 
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const scaleFactor = isMobile ? 0.7 : 1.0;
-
+  const [, setIsMobile] = useState(window.innerWidth < 768);
 
   useEffect(() => {
     // Focus the canvas when the component mounts
@@ -960,6 +958,7 @@ function App() {
 
     // Handle window resize for mobile detection
     const handleResize = () => {
+      
       setIsMobile(window.innerWidth < 768);
     };
     window.addEventListener('resize', handleResize);
@@ -993,17 +992,17 @@ function App() {
     touchEndY.current = e.touches[0].clientY;
   };
   const handleTouchEnd = useCallback(() => {
-    if (gameState === 'paused') return;
+    if (gameState === 'paused') return; 
 
     const deltaX = touchEndX.current - touchStartX.current;
-
+ 
     const activeShape = shapes.find(shape => !shape.hasLanded);
 
 
-    if (Math.abs(deltaX) > 50 && activeShape) {
-      const targetX = deltaX > 0
+    if (Math.abs(deltaX) > 20 && activeShape) {
+      const targetX = deltaX > 20
         ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1) * 0.25), activeShape.position.x + 0.25)
-        : Math.max(-1.25, activeShape.position.x - 0.25);
+        :  deltaX < -20 ? Math.max(-1.25, activeShape.position.x - 0.25) : activeShape.position.x;
 
       const validationPosition = isValidPosition(activeShape.type, targetX, activeShape.position.y, activeShape.rotation)
 
@@ -1022,10 +1021,19 @@ function App() {
 
 
   // Add a double tap handler for rotation
-  const handleDoubleTap = () => {
+  const handleTap = () => {
     const activeShape = shapes.find(shape => !shape.hasLanded);
+    if (!activeShape || gameState !== 'playing') return;
+    
+    const newRotation = (activeShape.rotation + 1) % 4;
+    const validationPosition = isValidPosition(
+      activeShape.type, 
+      activeShape.position.x, 
+      activeShape.position.y, 
+      newRotation
+    );
 
-    if (activeShape && gameState === 'playing') {
+    if (validationPosition) {
       handleRotate();
     }
   };
@@ -1285,6 +1293,7 @@ function App() {
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
+              onClick={handleTap}
             >
               {/* <Perf position="top-left" /> */}
               

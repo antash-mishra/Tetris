@@ -86,7 +86,7 @@ async fn echo(req_body: String) -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     // Connect to sqlite
-    let manager  = SqliteConnectionManager::file("score.db");
+    let manager  = SqliteConnectionManager::file("data/score.db");
     let pool = Pool::new(manager).expect("Failed to create pool");
 
     // Initialize database

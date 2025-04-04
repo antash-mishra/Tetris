@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame           } from '@react-three/fiber'
 import './App.css'
 import Tetris from './Tetris'
 import { Shape } from './components/Shape'
@@ -35,20 +35,6 @@ type ShapeState = {
   color: string
 }
 
-function ResponsiveOrthCamera() {
-  const {camera, size} = useThree()
-
-  useEffect(() => {
-    // Type guard to ensure we're working with an OrthographicCamera
-    if (camera instanceof THREE.PerspectiveCamera) {
-      console.log("cams: ", camera)
-    }
-  }, [size, camera])
-
-  return null
-}
-
-
 
 function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRotate, isGameOver, isValidPosition, gameState }: {
   shapeState: ShapeState,
@@ -74,7 +60,7 @@ function ShapeMovement({ shapeState, onUpdatePosition, updateAndLandShape, onRot
 
   const gridSize = 0.25;
 
-  const normalSpeed = 0.7; // Normal falling speed  
+  const normalSpeed = 0.8; // Normal falling speed  
 
   const [speed, setSpeed] = useState(normalSpeed);
 
@@ -997,24 +983,25 @@ function App() {
     const deltaX = touchEndX.current - touchStartX.current;
  
     const activeShape = shapes.find(shape => !shape.hasLanded);
+    let targetX = activeShape?.position.x || 0;
+    let validationPosition = true;
 
-
-    if (Math.abs(deltaX) > 20 && activeShape) {
-      const targetX = deltaX > 20
+    if (activeShape) {
+      targetX = deltaX > 20
         ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1) * 0.25), activeShape.position.x + 0.25)
         :  deltaX < -20 ? Math.max(-1.25, activeShape.position.x - 0.25) : activeShape.position.x;
 
-      const validationPosition = isValidPosition(activeShape.type, targetX, activeShape.position.y, activeShape.rotation)
-
+      validationPosition = isValidPosition(activeShape.type, targetX, activeShape.position.y, activeShape.rotation)
+    }
+    
+    if (Math.abs(deltaX) > 20 && activeShape && validationPosition) {
       const animate = () => {
         requestAnimationFrame(() => {
           console.log("validation: ", validationPosition);
           handleUpdatePosition(activeShape.id, targetX, activeShape.position.y);
         });
       };
-      if (validationPosition) {
-        animate();
-      }
+      animate();
     }
   }, [shapes, handleUpdatePosition, handleRotate, gameState]);
 

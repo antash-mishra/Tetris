@@ -14,7 +14,7 @@ primary_region = 'bom'
 # Add volume configuration
 [[mounts]]
   source = "score_data"
-  destination = "/data"
+  destination = "/app/data"
 
 [http_service]
   internal_port = 8080

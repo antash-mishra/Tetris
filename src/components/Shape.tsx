@@ -1,6 +1,6 @@
 import { Component, useEffect, useState } from 'react'
 import { useSpring, animated } from '@react-spring/three';
-import { Color, TextureLoader } from 'three';
+import { TextureLoader } from 'three';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 

@@ -968,62 +968,100 @@ function App() {
   const touchStartY = useRef(0);
   const touchEndY = useRef(0);
 
+  // Add these refs to track touch timing and prevent rotation on swipe
+  const touchStartTime = useRef<number>(0);
+  const hasSwiped = useRef<boolean>(false);
+  const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
+    touchStartTime.current = Date.now();
+    hasSwiped.current = false;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     touchEndX.current = e.touches[0].clientX;
     touchEndY.current = e.touches[0].clientY;
-  };
-  const handleTouchEnd = useCallback(() => {
-    if (gameState === 'paused') return; 
 
     const deltaX = touchEndX.current - touchStartX.current;
- 
-    const activeShape = shapes.find(shape => !shape.hasLanded);
-    let targetX = activeShape?.position.x || 0;
-    let validationPosition = true;
-
-    if (activeShape) {
-      targetX = deltaX > 20
-        ? Math.min(1.0 - ((activeShape.shapeMaxWidth - 1) * 0.25), activeShape.position.x + 0.25)
-        :  deltaX < -20 ? Math.max(-1.25, activeShape.position.x - 0.25) : activeShape.position.x;
-
-      validationPosition = isValidPosition(activeShape.type, targetX, activeShape.position.y, activeShape.rotation)
-    }
+    const deltaY = touchEndY.current - touchStartY.current;
     
-    if (Math.abs(deltaX) > 20 && activeShape && validationPosition) {
-      const animate = () => {
-        requestAnimationFrame(() => {
-          console.log("validation: ", validationPosition);
-          handleUpdatePosition(activeShape.id, targetX, activeShape.position.y);
-        });
-      };
-      animate();
+    if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+      hasSwiped.current = true;
     }
-  }, [shapes, handleUpdatePosition, handleRotate, gameState]);
+  
+  };
 
+  const handleTouchEnd = useCallback(() => {
+    if (gameState === 'paused') return;
+  
+    const deltaX = touchEndX.current - touchStartX.current;
+    const touchDuration = Date.now() - touchStartTime.current;
+   
+    // Only handle swipes, not taps
+    if (Math.abs(deltaX) > 20 && hasSwiped.current) {
+      const activeShape = shapes.find(shape => !shape.hasLanded);
+      if (activeShape) {
+        let targetX = activeShape.position.x;
+        
+        if (deltaX > 20) {
+          targetX = Math.min(1.0 - ((activeShape.shapeMaxWidth - 1) * 0.25), activeShape.position.x + 0.25);
+        } else if (deltaX < -20) {
+          targetX = Math.max(-1.25, activeShape.position.x - 0.25);
+        }
+  
+        const validationPosition = isValidPosition(
+          activeShape.type, 
+          targetX, 
+          activeShape.position.y, 
+          activeShape.rotation
+        );
+  
+        if (validationPosition) {
+          requestAnimationFrame(() => {
+            handleUpdatePosition(activeShape.id, targetX, activeShape.position.y);
+          });
+        }
+      }
+    }
+  }, [shapes, handleUpdatePosition, gameState]);
+  
+
+// Clean up the tap timeout if component unmounts
+useEffect(() => {
+  return () => {
+    if (tapTimeoutRef.current) {
+      clearTimeout(tapTimeoutRef.current);
+    }
+  };
+}, []);
 
 
   // Add a double tap handler for rotation
-  const handleTap = () => {
-    const activeShape = shapes.find(shape => !shape.hasLanded);
-    if (!activeShape || gameState !== 'playing') return;
+  const handleCanvasTap = useCallback((e: React.MouseEvent) => {
+    if (gameState === 'paused') return;
     
-    const newRotation = (activeShape.rotation + 1) % 4;
-    const validationPosition = isValidPosition(
-      activeShape.type, 
-      activeShape.position.x, 
-      activeShape.position.y, 
-      newRotation
-    );
-
-    if (validationPosition) {
-      handleRotate();
+    // Only handle as tap if we haven't moved significantly
+    if (!hasSwiped.current) {
+      const activeShape = shapes.find(shape => !shape.hasLanded);
+      if (!activeShape || gameState !== 'playing') return;
+      
+      const newRotation = (activeShape.rotation + 1) % 4;
+      const validationPosition = isValidPosition(
+        activeShape.type, 
+        activeShape.position.x, 
+        activeShape.position.y, 
+        newRotation
+      );
+  
+      if (validationPosition) {
+        handleRotate();
+      }
     }
-  };
+  }, [shapes, handleRotate, gameState]);
+  
 
 
   return (
@@ -1280,7 +1318,7 @@ function App() {
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
-              onClick={handleTap}
+              onClick={handleCanvasTap}
             >
               {/* <Perf position="top-left" /> */}
               
